@@ -120,7 +120,7 @@ export async function createSchemaNode(data, schema, nodeType) {
  */
 export async function updateSchemaNode(updates, currentNode, schema, currentGraph) {
     const {metadataConfig, relationships} = schema;
-    const metadata = [...currentNode.metadata];
+    const metadata = new Map(); // Use a Map to track unique metadata entries
     const edgeChanges = {
         remove: [],
         add: []
@@ -140,19 +140,20 @@ export async function updateSchemaNode(updates, currentNode, schema, currentGrap
         Object.keys(relationships).forEach(field => schemaFields.add(field));
     }
 
-    // Function to update or add metadata entry
-    const updateMetadataEntry = (key, value) => {
-        const metaKey = `${key.charAt(0).toUpperCase() + key.slice(1)}:`;
-        const existingIndex = metadata.findIndex(meta => meta.startsWith(metaKey));
-
-        const newValue = Array.isArray(value) ? value.join(', ') : value;
-        const newEntry = `${metaKey} ${newValue}`;
-
-        if (existingIndex !== -1) {
-            metadata[existingIndex] = newEntry;
-        } else {
-            metadata.push(newEntry);
+    // First, process existing metadata into the Map
+    currentNode.metadata.forEach(meta => {
+        const colonIndex = meta.indexOf(':');
+        if (colonIndex !== -1) {
+            const key = meta.substring(0, colonIndex).trim().toLowerCase();
+            const value = meta.substring(colonIndex + 1).trim();
+            metadata.set(key, value);
         }
+    });
+
+    // Function to update metadata entry
+    const updateMetadataEntry = (key, value) => {
+        const formattedValue = Array.isArray(value) ? value.join(', ') : value;
+        metadata.set(key.toLowerCase(), formattedValue);
     };
 
     // Handle all schema-defined fields (both required and optional)
@@ -193,6 +194,9 @@ export async function updateSchemaNode(updates, currentNode, schema, currentGrap
                         edgeType: config.edgeType
                     });
                 }
+
+                // Update metadata for relationship
+                updateMetadataEntry(field, value);
             }
         }
     }
@@ -204,7 +208,16 @@ export async function updateSchemaNode(updates, currentNode, schema, currentGrap
         }
     }
 
-    return {metadata, edgeChanges};
+    // Convert Map back to array format with proper capitalization
+    const updatedMetadata = Array.from(metadata).map(([key, value]) => {
+        const capitalizedKey = key.charAt(0).toUpperCase() + key.slice(1);
+        return `${capitalizedKey}: ${value}`;
+    });
+
+    return {
+        metadata: updatedMetadata,
+        edgeChanges
+    };
 }
 
 /**
