@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/chemiguel23-memorymesh-badge.png)](https://mseep.ai/app/chemiguel23-memorymesh)
+
 # MemoryMesh
 [![Release](https://img.shields.io/badge/Release-v0.2.8-blue.svg)](./CHANGELOG.md)
 [![smithery badge](https://smithery.ai/badge/memorymesh)](https://smithery.ai/server/memorymesh)
