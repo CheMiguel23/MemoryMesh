@@ -1,5 +1,6 @@
 # MemoryMesh
 [![Release](https://img.shields.io/badge/Release-v0.2.8-blue.svg)](./CHANGELOG.md)
+[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/CheMiguel23/MemoryMesh)](https://archestra.ai/mcp-catalog/CheMiguel23__MemoryMesh)
 [![smithery badge](https://smithery.ai/badge/memorymesh)](https://smithery.ai/server/memorymesh)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC.svg?logo=typescript&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
