@@ -1,0 +1,50 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "outDir": "dist",
+    "rootDir": "src",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "sourceMap": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowJs": true,
+    "checkJs": false,
+    "declaration": true,
+    "skipLibCheck": true,
+    "baseUrl": "src",
+    "paths": {
+      "@core/*": [
+        "core/*"
+      ],
+      "@infrastructure/*": [
+        "infrastructure/*"
+      ],
+      "@application/*": [
+        "application/*"
+      ],
+      "@integration/*": [
+        "integration/*"
+      ],
+      "@shared/*": [
+        "shared/*"
+      ],
+      "@data/*": [
+        "data/*"
+      ],
+      "@config/*": [
+        "config/*"
+      ]
+    }
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

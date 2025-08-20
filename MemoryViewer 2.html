@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/ace.js"></script>
+    <style>
+        /* --- Base Styles --- */
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --primary-light: #60a5fa;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.6;
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            color: var(--gray-800);
+            background-color: var(--gray-50);
+        }
+
+        /* --- Typography --- */
+        h1 {
+            margin-bottom: 2rem;
+            color: var(--gray-900);
+            font-size: 2rem;
+            font-weight: 600;
+        }
+
+        /* --- Layout Components --- */
+        .container {
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        /* --- Buttons --- */
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            font-size: 1rem;
+            background: var(--primary);
+            color: white;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background: var(--primary-dark);
+        }
+
+        /* --- Tabs --- */
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid var(--gray-200);
+            padding-bottom: 0.5rem;
+        }
+
+        .tab {
+            padding: 0.5rem 1rem;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 1rem;
+            color: var(--gray-600);
+            border-bottom: 2px solid transparent;
+            margin-bottom: -0.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .tab:hover {
+            color: var(--primary);
+        }
+
+        .tab.active {
+            color: var(--primary);
+            border-bottom: 2px solid var(--primary);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* --- File Selection --- */
+        .file-section {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .file-path {
+            flex: 1;
+            font-family: monospace;
+            padding: 0.5rem;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-300);
+            border-radius: 0.25rem;
+        }
+
+        /* --- Table View --- */
+        .table-container {
+            overflow-x: auto;
+            margin-bottom: 2rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            border: 1px solid var(--gray-200);
+            text-align: left;
+        }
+
+        th {
+            background: var(--gray-100);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        tbody tr:hover {
+            background: var(--gray-50);
+        }
+
+        /* --- Metadata and Expandable Controls --- */
+        .expand-button {
+            padding: 0.25rem 0.5rem;
+            background: var(--gray-100);
+            border: 1px solid var(--gray-300);
+            border-radius: 0.25rem;
+            cursor: pointer;
+            font-size: 0.75rem;
+            margin-right: 0.5rem;
+            color: var(--gray-700);
+            transition: all 0.2s ease;
+        }
+
+        .expand-button:hover {
+            background: var(--gray-200);
+        }
+
+        .metadata-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .metadata-item {
+            background: var(--gray-100);
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+        }
+
+        .metadata-key {
+            color: var(--gray-700);
+            font-weight: 500;
+        }
+
+        .metadata-value {
+            color: var(--gray-900);
+        }
+
+        .expandable-cell {
+            cursor: pointer;
+            position: relative;
+        }
+
+        .expandable-cell::after {
+            content: '▼';
+            position: absolute;
+            right: 0.5rem;
+            color: var(--gray-500);
+            transition: transform 0.2s;
+        }
+
+        .expandable-cell.expanded::after {
+            transform: rotate(180deg);
+        }
+
+        .metadata-summary {
+            color: var(--gray-600);
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+        }
+
+        /* --- Edge Links --- */
+        .edge-link {
+            color: var(--primary);
+            text-decoration: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .edge-link:hover {
+            text-decoration: underline;
+        }
+
+        .edge-count {
+            background: var(--primary-light);
+            color: white;
+            padding: 0.125rem 0.375rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+        }
+
+        .edge-list {
+            margin-top: 0.5rem;
+            padding-left: 1rem;
+            border-left: 2px solid var(--gray-200);
+        }
+
+        .edge-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0;
+            font-size: 0.875rem;
+        }
+
+        .edge-type {
+            color: var(--gray-600);
+        }
+
+        .edge-target {
+            color: var(--primary);
+            cursor: pointer;
+        }
+
+        .edge-target:hover {
+            text-decoration: underline;
+        }
+
+        /* --- Stats Panel --- */
+        .stats-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-title {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+
+        /* --- Toast Notifications --- */
+        #toastContainer {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            z-index: 1000;
+        }
+
+        .toast {
+            min-width: 250px;
+            padding: 1rem 1.5rem;
+            border-radius: 0.25rem;
+            color: white;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            transform: translateX(100%);
+            animation: slideIn 0.5s forwards, fadeOut 0.5s forwards 2.5s;
+        }
+
+        .toast-success {
+            background-color: var(--success);
+        }
+
+        .toast-error {
+            background-color: var(--danger);
+        }
+
+        @keyframes slideIn {
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes fadeOut {
+            to {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+        }
+
+        /* --- Search and Filter --- */
+        .search-container {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid var(--gray-300);
+            border-radius: 0.25rem;
+            font-size: 1rem;
+        }
+
+        .filter-select {
+            padding: 0.5rem;
+            border: 1px solid var(--gray-300);
+            border-radius: 0.25rem;
+            font-size: 1rem;
+            min-width: 150px;
+        }
+
+        /* --- JSON Editor --- */
+        .editor-container {
+            height: 600px;
+            border: 1px solid var(--gray-300);
+            border-radius: 0.25rem;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+
+        #jsonEditor {
+            height: 100%;
+            font-size: 14px;
+        }
+
+        /* --- Responsive Design --- */
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            .search-container {
+                flex-direction: column;
+            }
+
+            .metadata-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+<h1>Memory Viewer</h1>
+
+<div class="file-section">
+    <button class="btn" id="selectMemoryFileBtn">Select Memory File</button>
+    <div class="file-path" id="filePath">No file selected</div>
+</div>
+
+<!-- Toast Notifications Container -->
+<div id="toastContainer"></div>
+
+<!-- Stats Panel -->
+<div class="stats-panel">
+    <div class="stat-card">
+        <div class="stat-title">Total Nodes</div>
+        <div class="stat-value" id="totalNodes">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-title">Total Edges</div>
+        <div class="stat-value" id="totalEdges">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-title">Node Types</div>
+        <div class="stat-value" id="nodeTypes">0</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-title">Edge Types</div>
+        <div class="stat-value" id="edgeTypes">0</div>
+    </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+    <button class="tab active" data-tab="table">Table View</button>
+    <button class="tab" data-tab="raw">Raw JSON</button>
+</div>
+
+<!-- Table View -->
+<div id="tableView" class="tab-content active">
+    <div class="search-container">
+        <input type="text" class="search-input" id="searchInput" placeholder="Search...">
+        <select class="filter-select" id="typeFilter">
+            <option value="all">All Types</option>
+        </select>
+        <select class="filter-select" id="viewFilter">
+            <option value="all">All Items</option>
+            <option value="nodes">Nodes Only</option>
+            <option value="edges">Edges Only</option>
+        </select>
+    </div>
+    <div class="table-container">
+        <table id="memoryTable">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Name/From</th>
+                    <th>NodeType/To</th>
+                    <th>Metadata/EdgeType</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Raw JSON View -->
+<div id="rawView" class="tab-content">
+    <div class="editor-container">
+        <div id="jsonEditor"></div>
+    </div>
+</div>
+
+<script>
+    // --- Constants and State ---
+    const DB_NAME = 'MemoryViewerDB';
+    const STORE_NAME = 'file';
+    let db = null;
+    let fileHandle = null;
+    let jsonEditor = null;
+    let currentData = null;
+
+    // --- Utility Functions ---
+    function showToast(message, type = 'success', duration = 3000) {
+        const toastContainer = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.classList.add('toast', type === 'success' ? 'toast-success' : 'toast-error');
+        toast.textContent = message;
+        toastContainer.appendChild(toast);
+        setTimeout(() => toast.remove(), duration + 1000);
+    }
+
+    function parseMetadata(metadata) {
+        if (!metadata || !Array.isArray(metadata)) return [];
+        
+        return metadata.map(item => {
+            const colonIndex = item.indexOf(':');
+            if (colonIndex === -1) return { key: '', value: item };
+            
+            const key = item.substring(0, colonIndex).trim();
+            const value = item.substring(colonIndex + 1).trim();
+            return { key, value };
+        });
+    }
+
+    function createMetadataDisplay(metadata) {
+        if (!metadata || !Array.isArray(metadata)) return '';
+
+        const parsedMetadata = parseMetadata(metadata);
+        const container = document.createElement('div');
+        
+        // Add summary
+        const summary = document.createElement('div');
+        summary.className = 'metadata-summary';
+        summary.textContent = `${parsedMetadata.length} metadata entries`;
+        container.appendChild(summary);
+
+        // Create metadata grid
+        const grid = document.createElement('div');
+        grid.className = 'metadata-grid';
+        
+        parsedMetadata.forEach(({ key, value }) => {
+            const item = document.createElement('div');
+            item.className = 'metadata-item';
+            
+            if (key) {
+                item.innerHTML = `<span class="metadata-key">${key}:</span> <span class="metadata-value">${value}</span>`;
+            } else {
+                item.innerHTML = `<span class="metadata-value">${value}</span>`;
+            }
+            
+            grid.appendChild(item);
+        });
+        
+        container.appendChild(grid);
+        return container;
+    }
+
+    // --- IndexedDB Operations ---
+    const idb = {
+        initDB: async () => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, 1);
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME);
+                    }
+                };
+                request.onsuccess = (event) => {
+                    db = event.target.result;
+                    resolve();
+                };
+                request.onerror = (event) => reject(event.target.error);
+            });
+        },
+        saveFileHandle: async (handle) => {
+            return new Promise((resolve, reject) => {
+const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.put(handle, 'memoryFile');
+                request.onsuccess = () => resolve();
+                request.onerror = (event) => reject(event.target.error);
+            });
+        },
+        getFileHandleFromDB: async () => {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.get('memoryFile');
+                request.onsuccess = async (event) => {
+                    const handle = event.target.result;
+                    if (handle) {
+                        const permission = await handle.queryPermission({mode: 'read'});
+                        if (permission === 'granted') {
+                            resolve(handle);
+                            return;
+                        }
+                    }
+                    resolve(null);
+                };
+                request.onerror = (event) => reject(event.target.error);
+            });
+        },
+        removeFileHandleFromDB: async () => {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.delete('memoryFile');
+                request.onsuccess = () => resolve();
+                request.onerror = (event) => reject(event.target.error);
+            });
+        }
+    };
+
+    // --- File System Operations ---
+    const fileSystem = {
+        selectFile: async () => {
+            try {
+                let options = {id: 'memory-file', mode: 'read'};
+                const storedHandle = await idb.getFileHandleFromDB();
+                options.startIn = storedHandle || 'documents';
+                [fileHandle] = await window.showOpenFilePicker(options);
+                if (storedHandle && fileHandle.name !== storedHandle.name) {
+                    await idb.removeFileHandleFromDB();
+                }
+                document.getElementById('filePath').textContent = fileHandle.name;
+                await fileSystem.loadFile();
+                showToast('File selected successfully!', 'success');
+                await idb.saveFileHandle(fileHandle);
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    showToast('Error selecting file: ' + error.message, 'error');
+                }
+            }
+        },
+        loadFile: async () => {
+            if (!fileHandle) {
+                showToast('Please select a memory file first', 'error');
+                return;
+            }
+            try {
+                const file = await fileHandle.getFile();
+                const content = await file.text();
+
+                // Split content into lines and parse each line as JSON
+                const lines = content.split('\n');
+                const jsonObjects = lines
+                    .filter(line => line.trim() !== '')
+                    .map(line => JSON.parse(line));
+
+                currentData = jsonObjects;
+                updateViews(jsonObjects);
+                showToast('Memory file loaded successfully!', 'success');
+            } catch (error) {
+                showToast('Error loading memory file: ' + error.message, 'error');
+            }
+        }
+    };
+
+    // --- Update Views ---
+    function updateStats(data) {
+        const nodes = data.filter(item => item.type === 'node');
+        const edges = data.filter(item => item.type === 'edge');
+        const nodeTypeSet = new Set(nodes.map(node => node.nodeType));
+        const edgeTypeSet = new Set(edges.map(edge => edge.edgeType));
+
+        document.getElementById('totalNodes').textContent = nodes.length;
+        document.getElementById('totalEdges').textContent = edges.length;
+        document.getElementById('nodeTypes').textContent = nodeTypeSet.size;
+        document.getElementById('edgeTypes').textContent = edgeTypeSet.size;
+
+        // Update filters
+        const typeFilter = document.getElementById('typeFilter');
+        typeFilter.innerHTML = '<option value="all">All Types</option>';
+        [...nodeTypeSet].sort().forEach(type => {
+            const option = document.createElement('option');
+            option.value = `node:${type}`;
+            option.textContent = `Node: ${type}`;
+            typeFilter.appendChild(option);
+        });
+        [...edgeTypeSet].sort().forEach(type => {
+            const option = document.createElement('option');
+            option.value = `edge:${type}`;
+            option.textContent = `Edge: ${type}`;
+            typeFilter.appendChild(option);
+        });
+    }
+
+    function updateTable(data, searchTerm = '', typeFilter = 'all', viewFilter = 'all') {
+        const tbody = document.querySelector('#memoryTable tbody');
+        tbody.innerHTML = '';
+
+        // Create a map of node relationships
+        const nodeEdges = new Map();
+        data.forEach(item => {
+            if (item.type === 'edge') {
+                if (!nodeEdges.has(item.from)) {
+                    nodeEdges.set(item.from, []);
+                }
+                nodeEdges.get(item.from).push(item);
+            }
+        });
+
+        const filteredData = data.filter(item => {
+            if (viewFilter === 'nodes' && item.type !== 'node') return false;
+            if (viewFilter === 'edges' && item.type !== 'edge') return false;
+
+            if (typeFilter !== 'all') {
+                const [filterType, filterValue] = typeFilter.split(':');
+                if (filterType === 'node' && (item.type !== 'node' || item.nodeType !== filterValue)) return false;
+                if (filterType === 'edge' && (item.type !== 'edge' || item.edgeType !== filterValue)) return false;
+            }
+
+            if (searchTerm) {
+                const searchLower = searchTerm.toLowerCase();
+                const itemString = JSON.stringify(item).toLowerCase();
+                return itemString.includes(searchLower);
+            }
+
+            return true;
+        });
+
+        // Show only nodes in the main table if edge integration is enabled
+        const displayData = viewFilter === 'edges' ? filteredData : filteredData.filter(item => item.type === 'node');
+
+        displayData.forEach(item => {
+            const row = document.createElement('tr');
+            
+            // Type column
+            const typeCell = document.createElement('td');
+            typeCell.textContent = item.type;
+            row.appendChild(typeCell);
+            
+            // Name column
+            const nameCell = document.createElement('td');
+            nameCell.textContent = item.name;
+            
+            // Add edge information if available
+            const edges = nodeEdges.get(item.name);
+            if (edges && edges.length > 0) {
+                const edgeLink = document.createElement('div');
+                edgeLink.innerHTML = `
+                    <a class="edge-link">
+                        View Edges
+                        <span class="edge-count">${edges.length}</span>
+                    </a>
+                `;
+                
+                const edgeList = document.createElement('div');
+                edgeList.className = 'edge-list';
+                edgeList.style.display = 'none';
+                
+                edges.forEach(edge => {
+                    const edgeItem = document.createElement('div');
+                    edgeItem.className = 'edge-item';
+                    edgeItem.innerHTML = `
+                        <span class="edge-type">${edge.edgeType}</span>
+                        <span class="edge-target" data-node="${edge.to}">→ ${edge.to}</span>
+                    `;
+                    edgeList.appendChild(edgeItem);
+                });
+                
+                edgeLink.querySelector('.edge-link').addEventListener('click', () => {
+                    edgeList.style.display = edgeList.style.display === 'none' ? 'block' : 'none';
+                });
+                
+                nameCell.appendChild(edgeLink);
+                nameCell.appendChild(edgeList);
+            }
+            
+            row.appendChild(nameCell);
+            
+            // NodeType column
+            const nodeTypeCell = document.createElement('td');
+            nodeTypeCell.textContent = item.nodeType;
+            row.appendChild(nodeTypeCell);
+            
+            // Metadata column
+            const metadataCell = document.createElement('td');
+            if (item.metadata) {
+                const metadataHeader = document.createElement('div');
+                metadataHeader.className = 'metadata-header';
+                
+                const expandButton = document.createElement('button');
+                expandButton.className = 'expand-button';
+                expandButton.textContent = 'Show Metadata';
+                
+                const metadataCount = document.createElement('span');
+                metadataCount.className = 'metadata-summary';
+                metadataCount.textContent = `${item.metadata.length} entries`;
+                
+                metadataHeader.appendChild(expandButton);
+                metadataHeader.appendChild(metadataCount);
+                
+                const metadataContent = createMetadataDisplay(item.metadata);
+                metadataContent.querySelector('.metadata-grid').style.display = 'none';
+                
+                expandButton.addEventListener('click', () => {
+                    const grid = metadataContent.querySelector('.metadata-grid');
+                    const isExpanded = grid.style.display !== 'none';
+                    grid.style.display = isExpanded ? 'none' : 'grid';
+                    expandButton.textContent = isExpanded ? 'Show Metadata' : 'Hide Metadata';
+                });
+                
+                metadataCell.appendChild(metadataHeader);
+                metadataCell.appendChild(metadataContent);
+            }
+            row.appendChild(metadataCell);
+            
+            tbody.appendChild(row);
+        });
+
+        // Add click handlers for edge targets
+        document.querySelectorAll('.edge-target').forEach(target => {
+            target.addEventListener('click', () => {
+                const nodeName = target.dataset.node;
+                const nodeRow = [...tbody.rows].find(row => 
+                    row.cells[1].textContent.trim() === nodeName
+                );
+                if (nodeRow) {
+                    nodeRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    nodeRow.style.backgroundColor = '#fff2cc';
+                    setTimeout(() => {
+                        nodeRow.style.backgroundColor = '';
+                    }, 2000);
+                }
+            });
+        });
+    }
+
+    function updateViews(data) {
+        // Update statistics
+        updateStats(data);
+
+        // Update table view
+        const searchInput = document.getElementById('searchInput');
+        const typeFilter = document.getElementById('typeFilter');
+        const viewFilter = document.getElementById('viewFilter');
+        updateTable(data, searchInput.value, typeFilter.value, viewFilter.value);
+
+        // Update raw JSON view
+        if (jsonEditor) {
+            jsonEditor.setValue(JSON.stringify(data, null, 2));
+            jsonEditor.clearSelection();
+        }
+    }
+
+    // --- UI Management ---
+    const ui = {
+        switchTab: (tabName) => {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector(`.tab[data-tab="${tabName}"]`).classList.add('active');
+            document.getElementById(`${tabName}View`).classList.add('active');
+        },
+        setupEditor: () => {
+            jsonEditor = ace.edit("jsonEditor");
+            jsonEditor.setTheme("ace/theme/monokai");
+            jsonEditor.session.setMode("ace/mode/json");
+            jsonEditor.setOptions({
+                fontSize: "14px",
+                showPrintMargin: false,
+                showGutter: true,
+                highlightActiveLine: true,
+                readOnly: true
+            });
+        }
+    };
+
+    // --- Event Handlers ---
+    function setupEventListeners() {
+        document.getElementById('selectMemoryFileBtn').addEventListener('click', fileSystem.selectFile);
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => ui.switchTab(tab.dataset.tab));
+        });
+
+        // Search and filter handlers
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            if (currentData) {
+                const typeFilter = document.getElementById('typeFilter').value;
+                const viewFilter = document.getElementById('viewFilter').value;
+                updateTable(currentData, e.target.value, typeFilter, viewFilter);
+            }
+        });
+
+        document.getElementById('typeFilter').addEventListener('change', (e) => {
+            if (currentData) {
+                const searchTerm = document.getElementById('searchInput').value;
+                const viewFilter = document.getElementById('viewFilter').value;
+                updateTable(currentData, searchTerm, e.target.value, viewFilter);
+            }
+        });
+
+        document.getElementById('viewFilter').addEventListener('change', (e) => {
+            if (currentData) {
+                const searchTerm = document.getElementById('searchInput').value;
+                const typeFilter = document.getElementById('typeFilter').value;
+                updateTable(currentData, searchTerm, typeFilter, e.target.value);
+            }
+        });
+    }
+
+    // --- Initialization ---
+    async function initialize() {
+        try {
+            await idb.initDB();
+        } catch (error) {
+            showToast('Error initializing database: ' + error.message, 'error');
+            return;
+        }
+
+        if (!('showOpenFilePicker' in window)) {
+            showToast('Your browser does not support the File System Access API. Please use a modern browser like Chrome or Edge.', 'error', 0);
+            return;
+        }
+
+        try {
+            const storedHandle = await idb.getFileHandleFromDB();
+            if (storedHandle) {
+                const permission = await storedHandle.queryPermission({mode: 'read'});
+                if (permission === 'granted') {
+                    fileHandle = storedHandle;
+                    document.getElementById('filePath').textContent = fileHandle.name;
+                    await fileSystem.loadFile();
+                    showToast('Loaded previously selected file.', 'success');
+                } else {
+                    const requestPermission = await storedHandle.requestPermission({mode: 'read'});
+                    if (requestPermission === 'granted') {
+                        fileHandle = storedHandle;
+                        document.getElementById('filePath').textContent = fileHandle.name;
+                        await fileSystem.loadFile();
+                        showToast('Loaded previously selected file.', 'success');
+                    } else {
+                        await idb.removeFileHandleFromDB();
+                        showToast('Permission to access the previously selected file was denied.', 'error');
+                    }
+                }
+            }
+        } catch (error) {
+            showToast('Error accessing stored file: ' + error.message, 'error');
+        }
+
+        ui.setupEditor();
+        setupEventListeners();
+    }
+
+    // --- Start the application ---
+    initialize();
+</script>
+</body>
+</html>
