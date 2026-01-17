@@ -1,6 +1,6 @@
 # MemoryMesh
 [![Release](https://img.shields.io/badge/Release-v0.2.8-blue.svg)](./CHANGELOG.md)
-[![smithery badge](https://smithery.ai/badge/memorymesh)](https://smithery.ai/server/memorymesh)
+[![MseeP.ai Security Assessment](https://mseep.net/pr/chemiguel23-memorymesh-badge.png)](https://mseep.ai/app/chemiguel23-memorymesh)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC.svg?logo=typescript&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![GitHub Stars](https://img.shields.io/github/stars/CheMiguel23/MemoryMesh.svg?style=social)
@@ -222,14 +222,6 @@ Experiment with different prompts to find what works best for your use case!
 ![image](https://github.com/user-attachments/assets/508d5903-2896-4665-a892-cdb7b81dfba6)
 
 ## Installation
-
-### Installing via Smithery
-
-To install MemoryMesh for Claude Desktop automatically via [Smithery](https://smithery.ai/server/memorymesh):
-
-```bash
-npx -y @smithery/cli install memorymesh --client claude
-```
 
 ### Prerequisites
 
