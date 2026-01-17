@@ -165,6 +165,39 @@ class DynamicSchemaToolRegistry implements IDynamicSchemaToolRegistry {
             switch (operation) {
                 case 'add': {
                     const nodeData = args[schemaName];
+
+                    // Validate that the required argument object exists
+                    if (!nodeData || typeof nodeData !== 'object') {
+                        return formatToolError({
+                            operation: toolName,
+                            error: `Missing required argument: "${schemaName}" object not provided`,
+                            context: {
+                                receivedArgs: Object.keys(args),
+                                expectedKey: schemaName,
+                                exampleUsage: `{ "${schemaName}": { "name": "...", ...other_properties } }`
+                            },
+                            suggestions: [
+                                `Provide the "${schemaName}" object with required properties`,
+                                'Ensure the argument structure matches the schema'
+                            ]
+                        });
+                    }
+
+                    // Validate that the name property exists
+                    if (!nodeData.name || typeof nodeData.name !== 'string') {
+                        return formatToolError({
+                            operation: toolName,
+                            error: `Missing required property: "name" is required for ${schemaName}`,
+                            context: {
+                                receivedProperties: Object.keys(nodeData),
+                                requiredProperty: 'name'
+                            },
+                            suggestions: [
+                                `Provide a "name" property in the ${schemaName} object`
+                            ]
+                        });
+                    }
+
                     const existingNodes = await knowledgeGraphManager.openNodes([nodeData.name]);
 
                     if (existingNodes.nodes.length > 0) {
@@ -192,8 +225,42 @@ class DynamicSchemaToolRegistry implements IDynamicSchemaToolRegistry {
                 }
 
                 case 'update': {
+                    const updateData = args[`update_${schemaName}`];
+
+                    // Validate that the required argument object exists
+                    if (!updateData || typeof updateData !== 'object') {
+                        return formatToolError({
+                            operation: toolName,
+                            error: `Missing required argument: "update_${schemaName}" object not provided`,
+                            context: {
+                                receivedArgs: Object.keys(args),
+                                expectedKey: `update_${schemaName}`,
+                                exampleUsage: `{ "update_${schemaName}": { "name": "...", ...properties_to_update } }`
+                            },
+                            suggestions: [
+                                `Provide the "update_${schemaName}" object with the name and properties to update`,
+                                'Ensure the argument structure matches the schema'
+                            ]
+                        });
+                    }
+
+                    // Validate that the name property exists
+                    if (!updateData.name || typeof updateData.name !== 'string') {
+                        return formatToolError({
+                            operation: toolName,
+                            error: `Missing required property: "name" is required to identify which ${schemaName} to update`,
+                            context: {
+                                receivedProperties: Object.keys(updateData),
+                                requiredProperty: 'name'
+                            },
+                            suggestions: [
+                                `Provide a "name" property to identify the ${schemaName} to update`
+                            ]
+                        });
+                    }
+
                     return handleSchemaUpdate(
-                        args[`update_${schemaName}`],
+                        updateData,
                         schema,
                         schemaName,
                         knowledgeGraphManager
@@ -201,12 +268,36 @@ class DynamicSchemaToolRegistry implements IDynamicSchemaToolRegistry {
                 }
 
                 case 'delete': {
-                    const {name} = args[`delete_${schemaName}`];
-                    if (!name) {
+                    const deleteData = args[`delete_${schemaName}`];
+
+                    // Validate that the required argument object exists
+                    if (!deleteData || typeof deleteData !== 'object') {
                         return formatToolError({
                             operation: toolName,
-                            error: `Name is required to delete a ${schemaName}`,
-                            suggestions: ["Provide the 'name' parameter"]
+                            error: `Missing required argument: "delete_${schemaName}" object not provided`,
+                            context: {
+                                receivedArgs: Object.keys(args),
+                                expectedKey: `delete_${schemaName}`,
+                                exampleUsage: `{ "delete_${schemaName}": { "name": "..." } }`
+                            },
+                            suggestions: [
+                                `Provide the "delete_${schemaName}" object with the name of the ${schemaName} to delete`
+                            ]
+                        });
+                    }
+
+                    const {name} = deleteData;
+                    if (!name || typeof name !== 'string') {
+                        return formatToolError({
+                            operation: toolName,
+                            error: `Missing required property: "name" is required to delete a ${schemaName}`,
+                            context: {
+                                receivedProperties: Object.keys(deleteData),
+                                requiredProperty: 'name'
+                            },
+                            suggestions: [
+                                `Provide the "name" of the ${schemaName} to delete`
+                            ]
                         });
                     }
                     return handleSchemaDelete(name, schemaName, knowledgeGraphManager);
