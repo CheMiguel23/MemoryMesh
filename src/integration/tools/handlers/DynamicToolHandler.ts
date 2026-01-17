@@ -2,7 +2,7 @@
 
 import {BaseToolHandler} from './BaseToolHandler.js';
 import {dynamicToolManager} from '@integration/index.js';
-import {formatToolResponse, formatToolError} from '@shared/index.js';
+import {formatToolError} from '@shared/index.js';
 import type {ToolResponse} from '@shared/index.js';
 
 export class DynamicToolHandler extends BaseToolHandler {
@@ -10,16 +10,8 @@ export class DynamicToolHandler extends BaseToolHandler {
         try {
             this.validateArguments(args);
 
-            const toolResult = await dynamicToolManager.handleToolCall(name, args, this.knowledgeGraphManager);
-
-            if (toolResult?.toolResult?.isError !== undefined) {
-                return toolResult;
-            }
-
-            return formatToolResponse({
-                data: toolResult,
-                actionTaken: `Executed dynamic tool: ${name}`
-            });
+            // Response is already formatted by dynamicToolManager
+            return await dynamicToolManager.handleToolCall(name, args, this.knowledgeGraphManager);
         } catch (error) {
             return formatToolError({
                 operation: name,
