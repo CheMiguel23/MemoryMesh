@@ -1,6 +1,6 @@
 {
   "name": "memorymesh",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "description": "An MCP server that uses a knowledge graph to store and recall structured memory for AI models",
   "license": "MIT",
   "author": "CheMiguel23",
@@ -23,7 +23,8 @@
     "start:prod": "node dist/index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4"
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
