@@ -11,6 +11,8 @@ import type {
 
 /**
  * Formats successful tool responses following MCP standard.
+ * Per MCP spec: "For backwards compatibility, a tool that returns structured content
+ * SHOULD also return the serialized JSON in a TextContent block."
  */
 export function formatToolResponse<T = any>({
                                                 data,
@@ -18,7 +20,17 @@ export function formatToolResponse<T = any>({
                                                 actionTaken,
                                                 suggestions = []
                                             }: ToolResponseOptions<T>): ToolResponse<T> {
-    const content: ContentBlock[] = message ? [{type: "text", text: message}] : [];
+    const content: ContentBlock[] = [];
+
+    // Add message if provided
+    if (message) {
+        content.push({type: "text", text: message});
+    }
+
+    // Per MCP spec: include serialized JSON in text content for backwards compatibility
+    if (data !== undefined) {
+        content.push({type: "text", text: JSON.stringify(data, null, 2)});
+    }
 
     const structuredContent: StructuredContent = {
         timestamp: new Date().toISOString()

@@ -1,5 +1,5 @@
 # MemoryMesh
-[![Release](https://img.shields.io/badge/Release-v0.2.8-blue.svg)](./CHANGELOG.md)
+[![Release](https://img.shields.io/badge/Release-v0.3.0-blue.svg)](./CHANGELOG.md)
 [![MseeP.ai Security Assessment](https://mseep.net/pr/chemiguel23-memorymesh-badge.png)](https://mseep.ai/app/chemiguel23-memorymesh)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC.svg?logo=typescript&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -12,6 +12,9 @@ MemoryMesh is a knowledge graph server designed for AI models, with a focus on t
 <a href="https://glama.ai/mcp/servers/kf6n6221pd"><img width="380" height="200" src="https://glama.ai/mcp/servers/kf6n6221pd/badge" alt="MemoryMesh MCP server" /></a>
 
 ## IMPORTANT
+
+**v0.3.0 Update:** The MCP SDK has been updated from v1.0.4 to v1.25.2 to comply with the current [Model Context Protocol specification (2025-11-25)](https://modelcontextprotocol.io/specification/2025-11-25). This is a major update that brings compatibility with the latest MCP clients including Claude Desktop, ChatGPT, Cursor, Gemini, and VS Code. After updating, run `npm install` to fetch the new dependencies.
+
 Since `v0.2.7` the default location of schemas was changed to `dist/data/schemas`.
 This location is not expected to change in the future, but if you are updating from a previous version, make sure to move your schema files to the new location.
 
