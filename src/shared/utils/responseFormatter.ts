@@ -2,14 +2,15 @@
 
 import type {
     ToolResponse,
-    ToolResult,
+    ContentBlock,
+    StructuredContent,
     ToolResponseOptions,
     ToolErrorOptions,
     PartialSuccessOptions
 } from '@shared/index.js';
 
 /**
- * Formats successful tool responses in a consistent, AI-friendly way.
+ * Formats successful tool responses following MCP standard.
  */
 export function formatToolResponse<T = any>({
                                                 data,
@@ -17,29 +18,33 @@ export function formatToolResponse<T = any>({
                                                 actionTaken,
                                                 suggestions = []
                                             }: ToolResponseOptions<T>): ToolResponse<T> {
-    const toolResult: ToolResult<T> = {
-        isError: false,
-        content: message ? [{type: "text", text: message}] : [],
+    const content: ContentBlock[] = message ? [{type: "text", text: message}] : [];
+
+    const structuredContent: StructuredContent = {
         timestamp: new Date().toISOString()
     };
 
     if (data !== undefined) {
-        toolResult.data = data;
+        structuredContent.data = data;
     }
 
     if (actionTaken) {
-        toolResult.actionTaken = actionTaken;
+        structuredContent.actionTaken = actionTaken;
     }
 
     if (suggestions.length > 0) {
-        toolResult.suggestions = suggestions;
+        structuredContent.suggestions = suggestions;
     }
 
-    return {toolResult};
+    return {
+        content,
+        isError: false,
+        structuredContent
+    };
 }
 
 /**
- * Formats error responses in a consistent, AI-friendly way.
+ * Formats error responses following MCP standard.
  */
 export function formatToolError({
                                     operation,
@@ -48,28 +53,32 @@ export function formatToolError({
                                     suggestions = [],
                                     recoverySteps = []
                                 }: ToolErrorOptions): ToolResponse {
-    const toolResult: ToolResult = {
-        isError: true,
-        content: [
-            {type: "text", text: `Error during ${operation}: ${error}`},
-            ...(context ? [{type: "text", text: `Context: ${JSON.stringify(context)}`}] : [])
-        ],
+    const content: ContentBlock[] = [
+        {type: "text", text: `Error during ${operation}: ${error}`},
+        ...(context ? [{type: "text", text: `Context: ${JSON.stringify(context)}`}] : [])
+    ];
+
+    const structuredContent: StructuredContent = {
         timestamp: new Date().toISOString()
     };
 
     if (suggestions.length > 0) {
-        toolResult.suggestions = suggestions;
+        structuredContent.suggestions = suggestions;
     }
 
     if (recoverySteps.length > 0) {
-        toolResult.recoverySteps = recoverySteps;
+        structuredContent.recoverySteps = recoverySteps;
     }
 
-    return {toolResult};
+    return {
+        content,
+        isError: true,
+        structuredContent
+    };
 }
 
 /**
- * Creates an informative message for partial success scenarios.
+ * Creates an informative message for partial success scenarios following MCP standard.
  */
 export function formatPartialSuccess<T>({
                                             operation,
@@ -78,18 +87,18 @@ export function formatPartialSuccess<T>({
                                             failed,
                                             details
                                         }: PartialSuccessOptions<T>): ToolResponse {
-    const toolResult: ToolResult = {
-        isError: true,
-        content: [
-            {
-                type: "text",
-                text: `Partial success for ${operation}: ${succeeded.length} succeeded, ${failed.length} failed`
-            },
-            {
-                type: "text",
-                text: `Details: ${JSON.stringify(details)}`
-            }
-        ],
+    const content: ContentBlock[] = [
+        {
+            type: "text",
+            text: `Partial success for ${operation}: ${succeeded.length} succeeded, ${failed.length} failed`
+        },
+        {
+            type: "text",
+            text: `Details: ${JSON.stringify(details)}`
+        }
+    ];
+
+    const structuredContent: StructuredContent = {
         data: {
             succeededItems: succeeded,
             failedItems: failed.map(item => ({
@@ -105,5 +114,9 @@ export function formatPartialSuccess<T>({
         timestamp: new Date().toISOString()
     };
 
-    return {toolResult};
+    return {
+        content,
+        isError: true,
+        structuredContent
+    };
 }

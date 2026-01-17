@@ -4,6 +4,7 @@ import {StdioServerTransport} from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
     CallToolRequestSchema,
     ListToolsRequestSchema,
+    CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import {ApplicationManager} from '@application/managers/ApplicationManager.js';
 import {handleCallToolRequest} from '@integration/tools/callToolHandler.js';
@@ -36,7 +37,7 @@ async function main(): Promise<void> {
             };
         });
 
-        server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
             try {
                 if (!request.params.arguments) {
                     throw new Error("Tool arguments are required");
@@ -51,21 +52,16 @@ async function main(): Promise<void> {
 
                 const result = await handleCallToolRequest(toolRequest, knowledgeGraphManager);
 
-                return {
-                    toolResult: result.toolResult
-                };
+                return result as CallToolResult;
             } catch (error) {
                 console.error("Error in handleCallToolRequest:", error);
-                const formattedError = formatToolError({
+                return formatToolError({
                     operation: "callTool",
                     error: error instanceof Error ? error.message : 'Unknown error occurred',
                     context: {request},
                     suggestions: ["Examine the tool input parameters for correctness.", "Verify that the requested operation is supported."],
                     recoverySteps: ["Adjust the input parameters based on the schema definition."]
-                });
-                return {
-                    toolResult: formattedError.toolResult
-                };
+                }) as CallToolResult;
             }
         });
 

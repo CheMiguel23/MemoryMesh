@@ -109,12 +109,12 @@ export class ToolsRegistry {
 
             // For static tools, return success response
             return {
-                toolResult: {
-                    isError: false,
+                content: [],
+                isError: false,
+                structuredContent: {
                     data: args,
                     actionTaken: `Executed tool: ${toolName}`,
-                    timestamp: new Date().toISOString(),
-                    content: []
+                    timestamp: new Date().toISOString()
                 }
             };
         } catch (error) {
