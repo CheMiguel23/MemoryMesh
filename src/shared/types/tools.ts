@@ -33,31 +33,32 @@ export interface Tool {
 }
 
 /**
- * Content item in a tool result
+ * Content block in a tool result (MCP standard)
  */
-export interface ToolResultContent {
+export interface ContentBlock {
     type: string;
     text: string;
 }
 
 /**
- * Core result template that both success and error responses use
+ * Structured content for additional tool result data
  */
-export interface ToolResult<T = any> {
-    isError: boolean;
-    content: ToolResultContent[];  // For message display
-    data?: T;
+export interface StructuredContent {
+    data?: any;
     actionTaken?: string;
-    timestamp: string;
+    timestamp?: string;
     suggestions?: string[];
     recoverySteps?: string[];
+    [key: string]: any;
 }
 
 /**
- * Wrapper interface that matches the MCP server response format
+ * Tool response following MCP standard (CallToolResult)
  */
 export interface ToolResponse<T = any> {
-    toolResult: ToolResult<T>;
+    content: ContentBlock[];
+    isError?: boolean;
+    structuredContent?: StructuredContent;
 }
 
 /**
