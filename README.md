@@ -328,6 +328,34 @@ You can override default settings using in `/config/config.ts`
 
 1. **Node Deletion:** The AI may be hesitant to delete nodes from the knowledge graph. Encourage it through prompts if needed.
 
+2. **Conflicting Knowledge:** MemoryMesh currently uses a "last write wins" approach for handling data. If conflicting information is provided about the same entity, the most recent update will overwrite previous values. Here are strategies for managing conflicting information:
+
+   **Current Approaches:**
+   - **Use metadata to track sources:** Add metadata entries like `"Source: Character testimony"` or `"Source: Official records"` to track where information came from.
+   - **Use temporal metadata:** Include timestamps or narrative time markers (e.g., `"As of Chapter 3"`) in metadata to track when information was valid.
+   - **Create separate nodes for perspectives:** For subjective or disputed information, create separate nodes representing different viewpoints (e.g., `rumor_about_villain` vs `truth_about_villain`).
+   - **Use edge weights:** Leverage the optional `weight` property on edges (0-1 range) to indicate confidence or reliability of relationships.
+
+   **Example - Tracking uncertain information:**
+   ```json
+   {
+     "name": "VillainOrigin_Rumor",
+     "nodeType": "information",
+     "metadata": [
+       "Source: Tavern gossip",
+       "Reliability: Low",
+       "Claims: Villain came from the northern mountains"
+     ]
+   }
+   ```
+
+   **Future Considerations:**
+   For applications requiring sophisticated conflict resolution, consider implementing a custom layer that:
+   - Maintains version history of node changes
+   - Tracks provenance (source) of each piece of information
+   - Implements confidence scores for assertions
+   - Supports temporal validity periods for facts
+
 ## Contribution
 
 Contributions, feedback, and ideas are welcome!
