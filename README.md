@@ -199,6 +199,10 @@ The Memory Viewer is a standalone web application. [Memory Viewer discussion](ht
 * Choose File: Navigate to your MemoryMesh project directory and select the `memory.json` file (located in `dist/data/memory.json` by default).
 * Explore: The Memory Viewer will load and display the contents of your knowledge graph.
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/chemiguel23-memorymesh).
+
 ## Memory Flow
 
 ![image](https://github.com/user-attachments/assets/27519003-c1e6-448a-9fdb-cd0a0009f67d)
