@@ -51,10 +51,7 @@ describe('parseSchema', () => {
 describe('loadSchemas', () => {
     it('loads every bundled example schema', async () => {
         const schemas = await loadSchemas(fileURLToPath(new URL('../src/data/schemas', import.meta.url)));
-        expect(schemas.map(s => s.entity)).toEqual([
-            'artifact', 'currency', 'faction', 'inventory', 'location', 'npc',
-            'player_character', 'quest', 'skills', 'temporal', 'transportation',
-        ]);
+        expect(schemas.map(s => s.entity)).toEqual(['location', 'npc']);
     });
 
     it('skips broken files and duplicates but keeps the rest', async () => {

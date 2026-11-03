@@ -1,91 +1,31 @@
 {
   "name": "add_location",
-  "description": "Add a new location to the knowledge graph",
+  "description": "Add a new location (a city, building, room, region...) to the knowledge graph",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Location's name",
-      "required": true
-    },
-    "type": {
-      "type": "string",
-      "description": "Type of location",
+      "description": "The location's unique name",
       "required": true
     },
     "description": {
       "type": "string",
-      "description": "Detailed description of the location",
+      "description": "What the location is like",
       "required": true
     },
-    "status": {
+    "type": {
       "type": "string",
-      "description": "Current state of the location",
-      "required": true
-    },
-    "parentLocation": {
-      "type": "string",
-      "description": "The parent location this location belongs to",
-      "required": false
-    },
-    "atmosphere": {
-      "type": "string",
-      "description": "The general feel/mood of the location",
-      "required": false
-    },
-    "accessibility": {
-      "type": "string",
-      "description": "How characters can enter/exit the location",
-      "required": false
-    },
-    "size": {
-      "type": "string",
-      "description": "The size or scale of the location",
-      "required": false
-    },
-    "dangerLevel": {
-      "type": "string",
-      "description": "The level of danger present in the location",
-      "required": false
+      "description": "Kind of location, e.g. city, tavern, forest"
     },
     "notableFeatures": {
       "type": "array",
-      "description": "Distinct characteristics of the location",
-      "required": false
+      "description": "Distinctive things about the location"
     },
-    "subLocations": {
-      "type": "array",
-      "description": "Locations contained within this location",
-      "required": false,
+    "partOf": {
+      "type": "string",
+      "description": "The larger location this one is inside of",
       "relationship": {
-        "edgeType": "contains",
-        "description": "Locations contained within this location"
-      }
-    },
-    "relatedCharacters": {
-      "type": "array",
-      "description": "Characters present in or associated with this location",
-      "required": false,
-      "relationship": {
-        "edgeType": "present_in",
-        "description": "Characters associated with the location"
-      }
-    },
-    "relatedQuests": {
-      "type": "array",
-      "description": "Quests associated with this location",
-      "required": false,
-      "relationship": {
-        "edgeType": "takes_place_in",
-        "description": "Quests associated with the location"
-      }
-    },
-    "relatedArtifacts": {
-      "type": "array",
-      "description": "Artifacts found or stored at this location",
-      "required": false,
-      "relationship": {
-        "edgeType": "located_at",
-        "description": "Artifacts associated with the location"
+        "edgeType": "part_of",
+        "description": "The larger location this one is inside of (must already exist)"
       }
     }
   },

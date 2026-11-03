@@ -44,7 +44,7 @@ async function call(name: string, args?: Record<string, unknown>): Promise<{ tex
 const memory = () => existsSync(memoryFile) ? readFileSync(memoryFile, 'utf-8') : '';
 
 async function seedTown() {
-    const r = await call('add_location', {location: {name: 'Town', type: 'City', description: 'A town', status: 'Peaceful'}});
+    const r = await call('add_location', {location: {name: 'Town', type: 'City', description: 'A town'}});
     expect(r.isError).toBe(false);
 }
 
@@ -54,12 +54,12 @@ describe('tools/list', () => {
         tools = (await client.listTools()).tools;
     });
 
-    it('lists the 11 built-in tools plus add/update/delete for each of the 11 example schemas', () => {
-        expect(tools).toHaveLength(44);
+    it('lists the 11 built-in tools plus add/update/delete for each of the 2 example schemas', () => {
+        expect(tools).toHaveLength(17);
         const names = tools.map(t => t.name);
         for (const name of ['add_nodes', 'update_nodes', 'delete_nodes', 'add_edges', 'update_edges', 'delete_edges',
             'read_graph', 'search_nodes', 'open_nodes', 'add_metadata', 'delete_metadata',
-            'add_npc', 'update_npc', 'delete_npc', 'add_temporal']) {
+            'add_npc', 'update_npc', 'delete_npc', 'add_location', 'update_location', 'delete_location']) {
             expect(names).toContain(name);
         }
         expect(new Set(names).size).toBe(names.length);
@@ -145,7 +145,7 @@ describe('static tools', () => {
 describe('schema tools', () => {
     it('a failed add_npc saves nothing (regression: issue #35)', async () => {
         const r = await call('add_npc', {npc: {
-            name: 'Lilith', role: 'Mysterious', status: 'Active', description: 'd', currentLocation: ['Unknown'],
+            name: 'Lilith', description: 'd', currentLocation: ['Unknown'],
         }});
         expect(r.isError).toBe(true);
         expect(r.text).toContain('no node named "Unknown" exists');
@@ -154,21 +154,21 @@ describe('schema tools', () => {
 
     it('add, update and delete an npc with relationship edges', async () => {
         await seedTown();
-        await call('add_location', {location: {name: 'Forest', type: 'Wild', description: 'd', status: 'Quiet'}});
+        await call('add_location', {location: {name: 'Forest', type: 'Wild', description: 'd'}});
 
         const add = await call('add_npc', {npc: {
-            name: 'Bob', role: 'Smith', status: 'Alive', description: 'd', currentLocation: 'Town', mood: 'fine',
+            name: 'Bob', role: 'Smith', status: 'alive', description: 'd', currentLocation: 'Town', mood: 'fine',
         }});
         expect(add.text).toContain('Created npc: Bob');
         expect(memory()).toContain('"from":"Bob","to":"Town","edgeType":"located_in"');
 
         await call('add_metadata', {metadata: [{nodeName: 'Bob', contents: ['a note without a colon']}]});
-        const update = await call('update_npc', {update_npc: {name: 'Bob', status: 'Dead', currentLocation: 'Forest'}});
+        const update = await call('update_npc', {update_npc: {name: 'Bob', status: 'dead', currentLocation: 'Forest'}});
         expect(update.isError).toBe(false);
 
         const bob = JSON.parse(memory().split('\n').find(line => line.includes('"name":"Bob"'))!);
         expect(bob.metadata).toEqual([
-            'name: Bob', 'role: Smith', 'status: Dead', 'currentLocation: Forest', 'description: d', 'mood: fine',
+            'name: Bob', 'description: d', 'role: Smith', 'status: dead', 'currentLocation: Forest', 'mood: fine',
             'a note without a colon',
         ]);
         expect(memory()).toContain('"from":"Bob","to":"Forest"');
@@ -180,20 +180,22 @@ describe('schema tools', () => {
 
     it('update_npc can replace all metadata', async () => {
         await seedTown();
-        await call('add_npc', {npc: {name: 'Bob', role: 'Smith', status: 'Alive', description: 'd', currentLocation: 'Town'}});
+        await call('add_npc', {npc: {name: 'Bob', description: 'd', currentLocation: 'Town'}});
         await call('update_npc', {update_npc: {name: 'Bob', metadata: ['fresh: start']}});
         expect(memory()).toContain('"metadata":["fresh: start"]');
     });
 
-    it('add_temporal works with the fields its schema advertises', async () => {
-        const r = await call('add_temporal', {temporal: {name: 'Dawn', time: '06:00', day: 'Monday', year: '1023'}});
+    it('a location can be part of another location', async () => {
+        await seedTown();
+        const r = await call('add_location', {location: {name: 'Tavern', description: 'Noisy', partOf: 'Town'}});
         expect(r.isError).toBe(false);
+        expect(memory()).toContain('"from":"Tavern","to":"Town","edgeType":"part_of"');
     });
 
     it('explains missing arguments', async () => {
         expect((await call('add_npc', {})).text).toContain('Missing argument "npc"');
         expect((await call('add_npc', {npc: {name: 'Bob'}})).text)
-            .toContain('Missing required field(s) for npc: role, status, currentLocation, description');
+            .toContain('Missing required field(s) for npc: description');
         expect((await call('delete_npc', {delete_npc: {name: 'Nobody'}})).text).toBe('Error: npc "Nobody" not found');
     });
 });

@@ -1,5 +1,12 @@
 ## Changelog
 
+### Unreleased
+
+- **Bundled examples reduced to two small schemas** (`npc` and `location`), rewritten to be self-contained and to require only the fields that matter. The full RPG set and new sets (People & organization, Personal CRM, Research & reading notes) are shared in [Discussions](https://github.com/CheMiguel23/MemoryMesh/discussions). Existing installs keep any schemas already in `dist/data/schemas`.
+- **README rewritten** to be shorter and up to date.
+
+---
+
 ### v0.4.0 (2026-11-03)
 
 A cleanup release. The internals were rewritten from ~4,700 lines across 68 files into ~1,200 lines in 8 files. Tool names, tool arguments, schema files and the memory file format are unchanged, so existing setups and data keep working.
