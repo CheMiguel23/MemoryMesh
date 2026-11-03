@@ -1,6 +1,6 @@
 {
   "name": "memorymesh",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "An MCP server that uses a knowledge graph to store and recall structured memory for AI models",
   "license": "MIT",
   "author": "CheMiguel23",
@@ -14,30 +14,24 @@
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "build": "tsc && tsc-alias && shx chmod +x dist/*.js && copyfiles -u 1 src/data/schemas/*.json src/data/*.json dist/",
+    "build": "tsc && node scripts/copy-schemas.mjs",
     "prepare": "npm run build",
     "watch": "tsc --watch",
-    "start": "ts-node --esm src/index.ts",
-    "start:claude": "ts-node --esm src/index.ts",
-    "start:prod": "node dist/index.js",
+    "start": "node dist/index.js",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "test:ui": "vitest --ui"
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.2",
-    "zod": "^3.25.0"
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "@vitest/coverage-v8": "^4.0.17",
-    "copyfiles": "^2.4.1",
-    "shx": "^0.3.4",
-    "ts-node": "^10.9.2",
-    "tsc-alias": "^1.8.10",
     "typescript": "^5.7.3",
-    "vitest": "^4.0.17"
+    "vitest": "^5.1.0"
   }
 }

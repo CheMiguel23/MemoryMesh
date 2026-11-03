@@ -1,5 +1,34 @@
 ## Changelog
 
+### v0.4.0 (2026-11-03)
+
+A cleanup release. The internals were rewritten from ~4,700 lines across 68 files into ~1,200 lines in 8 files. Tool names, tool arguments, schema files and the memory file format are unchanged, so existing setups and data keep working.
+
+#### Fixes
+
+- **Rebuilding no longer erases your memory.** `npm run build` (which also runs on every `npm install`) used to copy an empty `memory.json` over `dist/data/memory.json`. It now never touches the memory file, and does not overwrite schemas you edited in `dist/data/schemas`.
+- **Failed calls no longer save partial data.** For example, `add_npc` with a `currentLocation` that didn't exist used to report an error but still save the NPC (#35). Every tool call is now all-or-nothing.
+- **`update_<entity>` no longer damages metadata.** It used to delete entries without a `key: value` colon, rename keys (`currentLocation` → `Currentlocation`), and silently ignore its `metadata` argument. Now it updates only the fields you pass, keeps everything else, and `metadata` replaces the list as documented.
+- **`read_graph` works when the client sends no arguments.**
+- **Delete tools return a readable result** instead of an empty one, so the AI can see what happened.
+- **`add_temporal` (and any schema without a `name` property) now works.** The tool required `name` but didn't advertise it.
+- **Safer writes.** The memory file is written to a temporary file and then renamed, so a crash can't leave it half-written. Simultaneous tool calls are processed one at a time, so none of them is lost.
+- **A corrupt line in the memory file is reported** (with its line number) instead of being silently dropped on the next save.
+- **MemoryViewer: stored values are displayed as text**, so markup in node metadata or edge names can no longer run as script in the viewer (#64).
+
+#### Changes
+
+- **Configurable paths:** `MEMORYMESH_MEMORY_FILE` and `MEMORYMESH_SCHEMAS_DIR` environment variables.
+- **Clearer error messages** for the AI, e.g. listing every missing required field at once, or explaining which relationship target doesn't exist.
+- `update_<entity>` now marks `name` as required, and `additionalProperties: false` in a schema is enforced.
+- An invalid schema file is skipped (with the reason in the log) instead of preventing the server from starting.
+- Unknown tool names return a protocol error, as the MCP spec requires.
+- Tool results are a single text block (summary followed by JSON data). The unused `structuredContent` field was removed.
+- Updated `@modelcontextprotocol/sdk` to 1.32.2 and `zod` to 4; `npm audit` reports no vulnerabilities. Removed unused build dependencies (`ts-node`, `tsc-alias`, `copyfiles`, `shx`).
+- Docker image uses Node 22 and stores memory in a `/data` volume.
+
+---
+
 ### v0.3.0 (2026-01-17)
 
 #### Breaking Changes

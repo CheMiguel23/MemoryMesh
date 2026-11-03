@@ -497,6 +497,14 @@
         setTimeout(() => toast.remove(), duration + 1000);
     }
 
+    /** Creates a <span> whose content is plain text (safe for untrusted values). */
+    function textSpan(className, text) {
+        const span = document.createElement('span');
+        span.className = className;
+        span.textContent = String(text);
+        return span;
+    }
+
     function parseMetadata(metadata) {
         if (!metadata || !Array.isArray(metadata)) return [];
         
@@ -530,11 +538,11 @@
             const item = document.createElement('div');
             item.className = 'metadata-item';
             
+            // Values come from the memory file (written by an AI), so insert them as text, never as HTML.
             if (key) {
-                item.innerHTML = `<span class="metadata-key">${key}:</span> <span class="metadata-value">${value}</span>`;
-            } else {
-                item.innerHTML = `<span class="metadata-value">${value}</span>`;
+                item.append(textSpan('metadata-key', `${key}:`), ' ');
             }
+            item.append(textSpan('metadata-value', value));
             
             grid.appendChild(item);
         });
@@ -741,10 +749,9 @@ const transaction = db.transaction([STORE_NAME], 'readwrite');
                 edges.forEach(edge => {
                     const edgeItem = document.createElement('div');
                     edgeItem.className = 'edge-item';
-                    edgeItem.innerHTML = `
-                        <span class="edge-type">${edge.edgeType}</span>
-                        <span class="edge-target" data-node="${edge.to}">→ ${edge.to}</span>
-                    `;
+                    const target = textSpan('edge-target', `→ ${edge.to}`);
+                    target.dataset.node = edge.to;
+                    edgeItem.append(textSpan('edge-type', edge.edgeType), ' ', target);
                     edgeList.appendChild(edgeItem);
                 });
                 
