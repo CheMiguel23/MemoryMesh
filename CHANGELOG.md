@@ -2,7 +2,7 @@
 
 ### Unreleased
 
-- **Bundled examples reduced to two small schemas** (`npc` and `location`), rewritten to be self-contained and to require only the fields that matter. The full RPG set and new sets (People & organization, Personal CRM, Research & reading notes) are shared in [Discussions](https://github.com/CheMiguel23/MemoryMesh/discussions). Existing installs keep any schemas already in `dist/data/schemas`.
+- **Bundled examples reduced to two small schemas** (`npc` and `location`), rewritten to be self-contained and to require only the fields that matter. The full [RPG set](https://github.com/CheMiguel23/MemoryMesh/discussions/70) and new sets ([People & organization](https://github.com/CheMiguel23/MemoryMesh/discussions/67), [Personal CRM](https://github.com/CheMiguel23/MemoryMesh/discussions/68), [Research & reading notes](https://github.com/CheMiguel23/MemoryMesh/discussions/69)) are shared in Discussions. Existing installs keep any schemas already in `dist/data/schemas`.
 - **README rewritten** to be shorter and up to date.
 
 ---

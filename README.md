@@ -72,10 +72,10 @@ The [SchemaManager](https://github.com/CheMiguel23/MemoryMesh/blob/main/SchemaMa
 
 MemoryMesh ships with two small examples, `npc` and `location`. Ready-made sets for different uses are shared in [Discussions](https://github.com/CheMiguel23/MemoryMesh/discussions):
 
-- **People & organization**: people, teams, projects, places and events (who reports to whom, who's responsible for what, who went where, birthdays)
-- **Personal CRM**: contacts, companies, interactions and follow-ups
-- **Research & reading notes**: sources, authors, concepts and notes
-- **RPG & storytelling**: the full set of 11 schemas for text-based games
+- **[People & organization](https://github.com/CheMiguel23/MemoryMesh/discussions/67)**: people, teams, projects, places and events (who reports to whom, who's responsible for what, who went where, birthdays)
+- **[Personal CRM](https://github.com/CheMiguel23/MemoryMesh/discussions/68)**: contacts, companies, interactions and follow-ups
+- **[Research & reading notes](https://github.com/CheMiguel23/MemoryMesh/discussions/69)**: sources, authors, concepts and notes
+- **[RPG & storytelling](https://github.com/CheMiguel23/MemoryMesh/discussions/70)**: the full set of 11 schemas for text-based games
 
 Feel free to share your own.
 
