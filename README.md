@@ -1,5 +1,5 @@
 # MemoryMesh
-[![Release](https://img.shields.io/badge/Release-v0.3.0-blue.svg)](./CHANGELOG.md)
+[![Release](https://img.shields.io/badge/Release-v0.4.0-blue.svg)](./CHANGELOG.md)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC.svg?logo=typescript&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![GitHub Stars](https://img.shields.io/github/stars/CheMiguel23/MemoryMesh.svg?style=social)
@@ -14,10 +14,9 @@ MemoryMesh is a knowledge graph server designed for AI models, with a focus on t
 
 ## IMPORTANT
 
-**v0.3.0 Update:** The MCP SDK has been updated from v1.0.4 to v1.25.2 to comply with the current [Model Context Protocol specification (2025-11-25)](https://modelcontextprotocol.io/specification/2025-11-25). This is a major update that brings compatibility with the latest MCP clients including Claude Desktop, ChatGPT, Cursor, Gemini, and VS Code. After updating, run `npm install` to fetch the new dependencies.
+**v0.4.0 Update:** The internals were rewritten to be much smaller and more reliable. Tool names, schemas and the memory file format are unchanged, so your existing setup and data keep working. Notable fixes: rebuilding or running `npm install` no longer erases `dist/data/memory.json`, and a failed tool call no longer leaves half-saved data behind. See the [changelog](./CHANGELOG.md) for details.
 
-Since `v0.2.7` the default location of schemas was changed to `dist/data/schemas`.
-This location is not expected to change in the future, but if you are updating from a previous version, make sure to move your schema files to the new location.
+Schemas live in `dist/data/schemas` and memory in `dist/data/memory.json` by default. Both locations can be changed with [environment variables](#environment-variables).
 
 ## Quick Links
 
@@ -46,7 +45,6 @@ Nodes represent entities or concepts within the knowledge graph. Each node has:
 * `name`: A unique identifier.
 * `nodeType`: The type of the node (e.g., `npc`, `artifact`, `location`), defined by your schemas.
 * `metadata`: An array of strings providing descriptive details about the node.
-* `weight`: (Optional) A numerical value between 0 and 1 representing the strength of the relationship, defaulting to 1.
 
 **Example Node:**
 
@@ -70,6 +68,7 @@ Edges represent relationships between nodes. Each edge has:
 * `from`: The name of the source node.
 * `to`: The name of the target node.
 * `edgeType`: The type of relationship (e.g., `owns`, `located_in`).
+* `weight`: (Optional) A number between 0 and 1 representing the strength or confidence of the relationship. Treated as 1 when not set.
 
 ```json
 {
@@ -89,7 +88,7 @@ Place your schema files (`.schema.json`) in the `dist/data/schemas` directory of
 
 ##### Schema Structure
 
-File name: `[name].schema.json`. For example, for a schema defining an 'npc', the filename would be `add_npc.schema.json`.
+File name: any name ending in `.schema.json`, for example `npc.schema.json`. The tool names come from the `name` field inside the file, not from the file name.
 
 * `name` - Identifier for the schema and node type within the memory. **IMPORTANT**: The schema’s name *must* start with `add_` to be recognized.
 * `description` - Used as the description for the `add_<name>` tool, providing context for the AI. *(The `delete` and `update` tools have a generic description)*
@@ -99,10 +98,13 @@ File name: `[name].schema.json`. For example, for a schema defining an 'npc', th
         * `description` - Helps guide the AI on the entity’s purpose.
         * `required` - Boolean. If `true`, the **AI is forced** to provide this property when creating a node.
         * `enum` - An array of strings. If present, the **AI must choose** one of the given options.
-        * `relationship` - Defines a connection to another node. If a property is required and has a relationship, the **AI will always create** both the node and the corresponding edge.
+        * `relationship` - Defines a connection to another node. The AI provides one or more node names, and MemoryMesh creates an edge to each of them. If a property is required and has a relationship, the **AI will always create** both the node and the corresponding edge.
             * `edgeType` - Type of the relationship to be created.
             * `description` - Helps guide the AI on the relationship’s purpose.
-* `additionalProperties` - Boolean. If `true`, allows the AI to add extra attributes beyond those defined as required or optional.
+            * The target nodes must already exist. If one doesn't, the whole call fails with an explanation and nothing is saved, so the AI can create the missing node and try again.
+* `additionalProperties` - Boolean. If `true` (or left out), allows the AI to add extra attributes beyond those defined in `properties`. If `false`, extra attributes are rejected.
+
+If a schema file is invalid, MemoryMesh skips it, logs the reason, and still starts with the other schemas.
 
 ##### Example Schema (add_npc.schema.json):
 
@@ -144,8 +146,8 @@ File name: `[name].schema.json`. For example, for a schema defining an 'npc', th
 
 Based on this schema, MemoryMesh automatically creates:
 * add_npc: To add new NPC nodes.
-* update_npc: To modify existing NPC nodes.
-* delete_npc: To remove NPC nodes.
+* update_npc: To modify existing NPC nodes. Each field you pass replaces that field's entry in the node's metadata; other entries are kept. Passing `metadata` replaces the whole list.
+* delete_npc: To remove NPC nodes (and their edges).
 
 MemoryMesh includes 11 pre-built schemas designed for text-based RPGs, providing a ready-to-use foundation for game development.
 
@@ -175,7 +177,7 @@ These tools are then made available through a central hub within MemoryMesh, ens
 
 ### Memory file
 
-By default, data is stored in a JSON file in `dist/data/memory.json`.
+By default, data is stored in `dist/data/memory.json` (one JSON object per line). You can move it anywhere with the `MEMORYMESH_MEMORY_FILE` [environment variable](#environment-variables), which is a good idea if you want it outside the build folder.
 
 #### Memory Viewer
 
@@ -229,7 +231,7 @@ Experiment with different prompts to find what works best for your use case!
 
 ### Prerequisites
 
-*   **Node.js:** Version 18 or higher. You can download it from [nodejs.org](https://nodejs.org/).
+*   **Node.js:** Version 18 or higher (a current LTS version is recommended). You can download it from [nodejs.org](https://nodejs.org/).
 *   **npm:**  Usually included with Node.js.
 *   **Claude for Desktop:**  Make sure you have the latest version installed from [claude.ai/download](https://claude.ai/download).
 
@@ -253,12 +255,11 @@ Experiment with different prompts to find what works best for your use case!
     ```bash
     npm run build
     ```
-   This command compiles the TypeScript code into JavaScript in the `dist` directory and copies sample schema and data files into it as well.
+   This command compiles the TypeScript code into JavaScript in the `dist` directory and copies the example schemas to `dist/data/schemas`. Schemas that already exist there are not overwritten, so your edits survive rebuilds.
 
-4. **Verify File Copy (Optional):**
+4. **Verify the Build (Optional):**
 
-    *   The build process should automatically copy the `data` folder to `dist`.
-    *   **Check** that `dist/data` exists and contains `.json` files. Also verify that `dist/data/schemas` exists and contains `.schema.json` files.
+    *   **Check** that `dist/index.js` exists and that `dist/data/schemas` contains `.schema.json` files.
 
 5. **Configure Claude Desktop:**
 
@@ -300,7 +301,13 @@ Experiment with different prompts to find what works best for your use case!
 5. Click the <img src="https://mintlify.s3.us-west-1.amazonaws.com/mcp/images/claude-desktop-mcp-hammer-icon.svg"/> icon. If you see tools listed (e.g., `add_npc`, `update_npc`, etc.), your server is working and exposing tools correctly.
 
 ### Updating
-Before updates, make sure to back up your `dist/data` directory to avoid losing your memory data.
+
+```bash
+git pull
+npm install
+```
+
+Then restart your MCP client. Since v0.4.0, updating keeps your memory file and any schemas you edited in `dist/data/schemas`. Backing up `dist/data` first is still a good habit.
 
 ### Troubleshooting
 
@@ -313,16 +320,43 @@ Before updates, make sure to back up your `dist/data` directory to avoid losing 
 
 *   **Tools not showing up:**
     *   Make sure your `npm run build` command completed without errors.
-    *   Verify that your schema files are correctly placed in `dist/data/schemas` and follow the correct naming convention (`add_[entity].schema.json`).
-    *   Check your server's console output or logs for any errors during initialization.
+    *   Verify that your schema files are in `dist/data/schemas` (or your `MEMORYMESH_SCHEMAS_DIR`), end in `.schema.json`, and have a `name` starting with `add_`.
+    *   Check the server log: on startup MemoryMesh prints which schemas it loaded, and the reason for any schema it skipped.
 
 ## Advanced Configuration
-MemoryMesh offers several ways to customize its behavior beyond the basic setup:
 
-### Variables
-You can override default settings using in `/config/config.ts`
-* MEMORY_FILE: Specifies the path to the JSON file used for storing the knowledge graph data. (Default: `dist/data/memory.json`)
-* SCHEMAS_DIR: Path to schema files directory. (Default: `dist/data/schemas/memory.json`)
+### Environment Variables
+
+| Variable | What it sets | Default |
+|---|---|---|
+| `MEMORYMESH_MEMORY_FILE` | Path of the memory file | `dist/data/memory.json` |
+| `MEMORYMESH_SCHEMAS_DIR` | Directory containing `.schema.json` files | `dist/data/schemas` |
+
+Set them in your MCP client configuration, for example in Claude Desktop:
+
+```json
+"mcpServers": {
+  "memorymesh": {
+    "command": "node",
+    "args": ["/ABSOLUTE/PATH/TO/memorymesh/dist/index.js"],
+    "env": {
+      "MEMORYMESH_MEMORY_FILE": "/ABSOLUTE/PATH/TO/my-campaign/memory.json",
+      "MEMORYMESH_SCHEMAS_DIR": "/ABSOLUTE/PATH/TO/my-campaign/schemas"
+    }
+  }
+}
+```
+
+This also makes it easy to keep separate memories (for example, one per campaign) by configuring several servers with different files.
+
+### Docker
+
+```bash
+docker build -t memorymesh .
+docker run -i --rm -v memorymesh-data:/data memorymesh
+```
+
+Inside the container the memory file is `/data/memory.json`, so mount a volume there to keep it.
 
 ## Limitations
 
@@ -355,6 +389,27 @@ You can override default settings using in `/config/config.ts`
    - Tracks provenance (source) of each piece of information
    - Implements confidence scores for assertions
    - Supports temporal validity periods for facts
+
+## Development
+
+```bash
+npm install     # also builds
+npm test        # runs the test suite
+npm run watch   # recompiles on change
+```
+
+The source is small:
+
+| File | Purpose |
+|---|---|
+| `src/index.ts` | Entry point: loads schemas and starts the server on stdio |
+| `src/server.ts` | Lists tools and routes each tool call to its handler |
+| `src/tools.ts` | Definitions of the built-in tools (`add_nodes`, `search_nodes`, ...) |
+| `src/schemas.ts` | Loads schema files and implements the generated `add_`/`update_`/`delete_` tools |
+| `src/graph.ts` | The graph operations themselves, with input validation |
+| `src/store.ts` | Reads and writes the memory file (safely, one change at a time) |
+| `src/config.ts` | Paths and version |
+| `src/types.ts` | Shared types (`Node`, `Edge`, ...) |
 
 ## Contribution
 

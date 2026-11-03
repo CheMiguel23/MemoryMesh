@@ -1,34 +1,21 @@
-# Use a Node.js image with Node.js 18
-FROM node:18-alpine AS builder
-
-# Set working directory
+FROM node:22-alpine AS builder
 WORKDIR /app
-
-# Copy package files and install dependencies
 COPY package.json package-lock.json ./
-RUN npm install --ignore-scripts
-
-# Copy source files
-COPY . .
-
-# Build the TypeScript project
+RUN npm ci --ignore-scripts
+COPY tsconfig.json ./
+COPY scripts ./scripts
+COPY src ./src
 RUN npm run build
 
-# Use a minimal Node.js runtime for the final image
-FROM node:18-alpine
-
-# Set working directory
+FROM node:22-alpine
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
+COPY --from=builder /app/dist ./dist
 
-# Copy the built files from the builder stage
-COPY --from=builder /app/dist /app/dist
-COPY --from=builder /app/package.json /app/package-lock.json ./
+# Keep your graph outside the container, e.g.:
+#   docker run -i -v memorymesh-data:/data memorymesh
+ENV MEMORYMESH_MEMORY_FILE=/data/memory.json
+VOLUME /data
 
-# Install only production dependencies
-RUN npm ci --omit=dev
-
-# Expose necessary ports (if applicable)
-# EXPOSE 3000  # Example port, adjust as necessary
-
-# Start the server
 CMD ["node", "dist/index.js"]
