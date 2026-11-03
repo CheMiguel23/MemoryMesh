@@ -7,7 +7,7 @@
  * either all changes are saved, or none are.
  */
 
-import type {Edge, EdgeUpdate, Graph, Node} from './types.js';
+import type {Edge, Graph, Node} from './types.js';
 
 // ---------------------------------------------------------------------------
 // Input checks (tool arguments come from an AI, so nothing can be assumed)
@@ -151,7 +151,7 @@ export function addEdges(graph: Graph, input: unknown): Edge[] {
 export function updateEdges(graph: Graph, input: unknown): Edge[] {
     const updated: Edge[] = [];
     for (const [i, raw] of requireArray(input, 'edges').entries()) {
-        const item = requireObject(raw, `edges[${i}]`) as Partial<Record<keyof EdgeUpdate, unknown>>;
+        const item = requireObject(raw, `edges[${i}]`);
         const current = {
             from: requireString(item.from, `edges[${i}].from`),
             to: requireString(item.to, `edges[${i}].to`),

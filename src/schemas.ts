@@ -28,7 +28,8 @@
 import {promises as fs} from 'fs';
 import path from 'path';
 import {addEdges, deleteNodes, findNode, requireArray} from './graph.js';
-import type {Edge, Graph, Node, Tool} from './types.js';
+import type {Tool} from '@modelcontextprotocol/sdk/types.js';
+import type {Edge, Graph, Node} from './types.js';
 
 export interface SchemaProperty {
     type: string;

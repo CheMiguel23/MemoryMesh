@@ -1,6 +1,6 @@
 /** Built-in tools that work with any node type. */
 
-import type {Tool} from './types.js';
+import type {Tool} from '@modelcontextprotocol/sdk/types.js';
 
 export const staticTools: Tool[] = [
     // --- Nodes and edges ---

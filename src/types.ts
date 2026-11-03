@@ -21,25 +21,3 @@ export interface Graph {
     nodes: Node[];
     edges: Edge[];
 }
-
-/** Identifies an existing edge and the changes to apply to it. */
-export interface EdgeUpdate {
-    from: string;
-    to: string;
-    edgeType: string;
-    newFrom?: string;
-    newTo?: string;
-    newEdgeType?: string;
-    newWeight?: number;
-}
-
-/** An MCP tool definition as advertised in tools/list. */
-export interface Tool {
-    name: string;
-    description: string;
-    inputSchema: {
-        type: 'object';
-        properties: Record<string, unknown>;
-        required?: string[];
-    };
-}

@@ -7,13 +7,13 @@ import {
     ListToolsRequestSchema,
     McpError,
     type CallToolResult,
+    type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import {CONFIG} from './config.js';
 import * as graph from './graph.js';
 import {addEntity, deleteEntity, schemaTools, updateEntity, type EntitySchema} from './schemas.js';
 import type {GraphStore} from './store.js';
 import {staticTools} from './tools.js';
-import type {Tool} from './types.js';
 
 type Args = Record<string, unknown>;
 type Handler = (args: Args) => Promise<CallToolResult>;
