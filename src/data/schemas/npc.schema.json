@@ -1,99 +1,37 @@
 {
   "name": "add_npc",
-  "description": "Add a new Non-Player Character (NPC) to the knowledge graph",
+  "description": "Add a new character (NPC) to the knowledge graph",
   "properties": {
     "name": {
       "type": "string",
-      "description": "NPC's name",
+      "description": "The character's unique name",
+      "required": true
+    },
+    "description": {
+      "type": "string",
+      "description": "Who the character is: appearance, personality, background",
       "required": true
     },
     "role": {
       "type": "string",
-      "description": "NPC's role or occupation",
-      "required": true
+      "description": "Occupation or role in the story, e.g. blacksmith, villain"
     },
     "status": {
       "type": "string",
-      "description": "NPC's current status",
-      "required": true
-    },
-    "currentLocation": {
-      "type": "string",
-      "description": "The current location of the NPC",
-      "required": true,
-      "relationship": {
-        "edgeType": "located_in",
-        "description": "The current location of the NPC"
-      }
-    },
-    "description": {
-      "type": "string",
-      "description": "A detailed description of the NPC",
-      "required": true
-    },
-    "gender": {
-      "type": "string",
-      "description": "NPC's gender",
-      "required": false
-    },
-    "race": {
-      "type": "string",
-      "description": "NPC's race",
-      "required": false
-    },
-    "background": {
-      "type": "string",
-      "description": "The background story of the NPC",
-      "required": false
-    },
-    "secret": {
-      "type": "string",
-      "description": "A hidden detail about the NPC",
-      "required": false
-    },
-    "origin": {
-      "type": "string",
-      "description": "The origin or home location of the NPC",
-      "required": false,
-      "relationship": {
-        "edgeType": "originates_from",
-        "description": "The origin location of the NPC"
-      }
+      "description": "The character's current condition",
+      "enum": ["alive", "injured", "dead", "missing"]
     },
     "traits": {
       "type": "array",
-      "description": "Unique traits or characteristics of the NPC",
-      "required": false
+      "description": "Personality traits or notable characteristics"
     },
-    "abilities": {
-      "type": "array",
-      "description": "Specific skills or powers the NPC possesses",
-      "required": false
-    },
-    "importance": {
+    "currentLocation": {
       "type": "string",
-      "description": "The importance of the NPC in the story or world",
-      "required": false
-    },
-    "reputation": {
-      "type": "string",
-      "description": "How the NPC is perceived by others",
-      "required": false
-    },
-    "money": {
-      "type": "string",
-      "description": "Currency or wealth the NPC holds",
-      "required": false
-    },
-    "alignment": {
-      "type": "string",
-      "description": "The ethical or moral alignment of the NPC",
-      "required": false
-    },
-    "motivation": {
-      "type": "string",
-      "description": "The driving purpose or goals of the NPC",
-      "required": false
+      "description": "Where the character is now",
+      "relationship": {
+        "edgeType": "located_in",
+        "description": "Where the character is now (the location must already exist)"
+      }
     }
   },
   "additionalProperties": true
