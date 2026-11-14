@@ -14,6 +14,7 @@
 - **SchemaManager offers the new types and the relationship target.**
 - **New tool `find_nodes`** answers exact questions that free-text search can't: all nodes of a type, with given field values, linked to a given node. For example `{"nodeType": "npc", "where": {"status": "injured"}, "linkedTo": "Riverton", "edgeType": "located_in"}`. A condition can be a value, a list of values (any of them), or a range for numbers and dates (`{"age": {"min": 18}}`). Results are limited to 50 by default, and the summary says how many matched in total.
 - **`open_nodes` can follow more than one link.** `depth` (0 to 3, default 1) returns everything within that many edges of the named nodes.
+- **Schemas reload while the server runs.** Adding, editing or deleting a file in the schemas folder updates the tools without a restart, and the client is told that the tool list changed. A file that is broken mid-edit is skipped until it is valid again. Clients that ignore that notification still need a restart.
 - **Existing memory is converted automatically.** On the first start, notes that belong to a field of the node's schema are moved into `fields`. The file as it was is kept next to it as `memory.json.before-fields.bak`. Notes that match no schema field stay notes.
 - **`search_nodes` also looks at fields and at what a node links to**, so `blacksmith riverton` finds the blacksmith whose location is recorded only as an edge to Riverton.
 - **MemoryViewer shows fields** together with the notes.

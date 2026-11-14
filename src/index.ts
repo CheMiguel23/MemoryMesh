@@ -4,6 +4,7 @@ import {CONFIG} from './config.js';
 import {convertNotesToFields, loadSchemas, type EntitySchema} from './schemas.js';
 import {createServer} from './server.js';
 import {GraphStore} from './store.js';
+import {watchDirectory} from './watch.js';
 
 /** Where the memory file is copied to before it is converted from the pre-0.7 format. */
 const BACKUP_SUFFIX = '.before-fields.bak';
@@ -31,7 +32,7 @@ async function main(): Promise<void> {
     const schemas = await loadSchemas(CONFIG.schemasDir);
     const store = new GraphStore(CONFIG.memoryFile);
     await upgradeMemoryFile(store, schemas);
-    const server = createServer(store, schemas);
+    const {server, setSchemas} = createServer(store, schemas);
     server.onerror = error => console.error('[memorymesh]', error);
 
     await server.connect(new StdioServerTransport());
@@ -47,6 +48,14 @@ async function main(): Promise<void> {
         );
     }
     console.error(`[memorymesh] schemas: ${schemas.map(s => s.entity).join(', ') || '(none)'} from ${CONFIG.schemasDir}`);
+
+    // Schema files can be added, edited or removed while the server runs: the tools follow.
+    watchDirectory(CONFIG.schemasDir, async () => {
+        const reloaded = await loadSchemas(CONFIG.schemasDir);
+        if (await setSchemas(reloaded)) {
+            console.error(`[memorymesh] schemas changed, now: ${reloaded.map(s => s.entity).join(', ') || '(none)'}`);
+        }
+    });
 }
 
 main().catch(error => {

@@ -133,15 +133,42 @@ function schemaHandlers(store: GraphStore, schema: EntitySchema): Record<string,
     };
 }
 
+export interface MemoryMeshServer {
+    server: Server;
+    /**
+     * Replaces the schemas, and with them the add_/update_/delete_ tools. When that
+     * changes the tool list, connected clients are told to fetch it again.
+     * Returns whether the tool list changed.
+     */
+    setSchemas(schemas: EntitySchema[]): Promise<boolean>;
+}
+
 /** Builds the full tool list and handlers, and wires them into an MCP server. */
-export function createServer(store: GraphStore, schemas: EntitySchema[]): Server {
-    const tools: Tool[] = [...staticTools, ...schemas.flatMap(schemaTools)];
-    const handlers: Record<string, Handler> = Object.assign(
-        staticHandlers(store),
-        ...schemas.map(schema => schemaHandlers(store, schema))
+export function createServer(store: GraphStore, initialSchemas: EntitySchema[]): MemoryMeshServer {
+    let tools: Tool[] = [];
+    let handlers: Record<string, Handler> = {};
+
+    const use = (schemas: EntitySchema[]): boolean => {
+        const before = JSON.stringify(tools);
+        tools = [...staticTools, ...schemas.flatMap(schemaTools)];
+        handlers = Object.assign(staticHandlers(store), ...schemas.map(schema => schemaHandlers(store, schema)));
+        return JSON.stringify(tools) !== before;
+    };
+    use(initialSchemas);
+
+    const server = new Server(
+        {name: CONFIG.name, version: CONFIG.version},
+        {capabilities: {tools: {listChanged: true}}}
     );
 
-    const server = new Server({name: CONFIG.name, version: CONFIG.version}, {capabilities: {tools: {}}});
+    const setSchemas = async (schemas: EntitySchema[]): Promise<boolean> => {
+        const changed = use(schemas);
+        if (changed && server.transport) {
+            // A client that has gone away, or does not listen, must not break the reload.
+            await server.sendToolListChanged().catch(() => undefined);
+        }
+        return changed;
+    };
 
     server.setRequestHandler(ListToolsRequestSchema, async () => ({tools}));
 
@@ -159,5 +186,5 @@ export function createServer(store: GraphStore, schemas: EntitySchema[]): Server
         }
     });
 
-    return server;
+    return {server, setSchemas};
 }

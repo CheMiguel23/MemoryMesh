@@ -5,24 +5,26 @@
 
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {InMemoryTransport} from '@modelcontextprotocol/sdk/inMemory.js';
-import type {CallToolResult, Tool} from '@modelcontextprotocol/sdk/types.js';
+import {ToolListChangedNotificationSchema, type CallToolResult, type Tool} from '@modelcontextprotocol/sdk/types.js';
 import {existsSync, mkdtempSync, readFileSync} from 'fs';
 import {tmpdir} from 'os';
 import path from 'path';
 import {fileURLToPath} from 'url';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {loadSchemas} from '../src/schemas.js';
-import {createServer} from '../src/server.js';
+import {createServer, type MemoryMeshServer} from '../src/server.js';
 import {GraphStore} from '../src/store.js';
 
 const schemasDir = fileURLToPath(new URL('../src/data/schemas', import.meta.url));
 
 let client: Client;
 let memoryFile: string;
+let server: MemoryMeshServer['server'];
+let setSchemas: MemoryMeshServer['setSchemas'];
 
 beforeEach(async () => {
     memoryFile = path.join(mkdtempSync(path.join(tmpdir(), 'memorymesh-e2e-')), 'memory.json');
-    const server = createServer(new GraphStore(memoryFile), await loadSchemas(schemasDir));
+    ({server, setSchemas} = createServer(new GraphStore(memoryFile), await loadSchemas(schemasDir)));
     const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
     await server.connect(serverSide);
     client = new Client({name: 'test', version: '1.0.0'});
@@ -193,6 +195,40 @@ describe('static tools', () => {
         for (const name of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) {
             await expect(client.callTool({name, arguments: {}})).rejects.toThrow('Unknown tool');
         }
+    });
+});
+
+describe('changing schemas while running', () => {
+    it('swaps the schema tools and tells the client the tool list changed', async () => {
+        let notifications = 0;
+        client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+            notifications++;
+        });
+        const toolNames = async () => (await client.listTools()).tools.map(t => t.name);
+        const [location, npc] = await loadSchemas(schemasDir);
+        expect(client.getServerCapabilities()?.tools?.listChanged).toBe(true);
+
+        // Remove the npc schema.
+        expect(await setSchemas([location])).toBe(true);
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(notifications).toBe(1);
+        expect(await toolNames()).not.toContain('add_npc');
+        expect(await toolNames()).toContain('add_location');
+        await expect(client.callTool({name: 'add_npc', arguments: {npc: {name: 'Bob'}}})).rejects.toThrow('Unknown tool');
+
+        // Nothing changed: no notification.
+        expect(await setSchemas([location])).toBe(false);
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(notifications).toBe(1);
+
+        // Put it back, with a new field.
+        const richer = {...npc, properties: {...npc.properties, age: {type: 'number', description: 'Age'}}};
+        expect(await setSchemas([location, richer])).toBe(true);
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(notifications).toBe(2);
+        await seedTown();
+        const r = await call('add_npc', {npc: {name: 'Bob', description: 'd', age: 40}});
+        expect(r.text).toContain('"age":40');
     });
 });
 

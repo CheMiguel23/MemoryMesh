@@ -62,6 +62,8 @@ Each schema is a JSON file ending in `.schema.json`. This is the `npc` example t
 | ↳ `relationship` | Creates an edge (`edgeType`) to each node named in this field. Those nodes must already exist. Add `"target": "location"` (or a list of types) to only allow nodes of that type. Updating the field replaces every edge of that `edgeType` going out from the node, so give each relationship field its own `edgeType`. |
 | `additionalProperties` | `true` (default) saves fields not listed above as extra fields; `false` rejects them. |
 
+Schema files are read while MemoryMesh runs: add, edit or delete one and the tools follow, with no restart, in MCP clients that refresh their tool list when a server asks them to. In other clients, restart the client.
+
 If a schema file is invalid, MemoryMesh skips it, logs the reason, and starts with the others. It also logs a warning for a schema that loads but probably won't behave as you expect, such as two relationship fields sharing an `edgeType`.
 
 The [SchemaManager](https://github.com/CheMiguel23/MemoryMesh/blob/main/SchemaManager.html) lets you create and edit schemas visually ([guide](https://github.com/CheMiguel23/MemoryMesh/discussions/3)).
@@ -204,6 +206,7 @@ npm run watch   # recompiles on change
 | `src/schemas.ts` | Loads schema files and implements the generated `add_`/`update_`/`delete_` tools |
 | `src/graph.ts` | The graph operations themselves, with input validation |
 | `src/store.ts` | Reads and writes the memory file, one change at a time |
+| `src/watch.ts` | Notices changes in the schemas folder |
 | `src/config.ts` | Paths and version |
 | `src/types.ts` | Shared types |
 
