@@ -243,14 +243,17 @@ function withNeighbours(graph: Graph, matches: Node[]): Graph {
     return {nodes: [...matches, ...neighbours], edges};
 }
 
-/** Case-insensitive search over node names, types and metadata. */
+/**
+ * Case-insensitive search over node names, types and metadata.
+ * A node matches when every word of the query appears somewhere in it,
+ * so "blacksmith riverton" finds a blacksmith whose metadata mentions Riverton.
+ */
 export function searchNodes(graph: Graph, query: unknown): Graph {
-    const q = requireString(query, '"query"').toLowerCase();
-    const matches = graph.nodes.filter(node =>
-        node.name.toLowerCase().includes(q) ||
-        node.nodeType.toLowerCase().includes(q) ||
-        node.metadata.some(entry => entry.toLowerCase().includes(q))
-    );
+    const words = requireString(query, '"query"').toLowerCase().split(/\s+/).filter(word => word !== '');
+    const matches = graph.nodes.filter(node => {
+        const text = [node.name, node.nodeType, ...node.metadata].join('\n').toLowerCase();
+        return words.every(word => text.includes(word));
+    });
     return withNeighbours(graph, matches);
 }
 

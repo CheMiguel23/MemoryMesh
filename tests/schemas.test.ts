@@ -3,7 +3,9 @@ import {tmpdir} from 'os';
 import path from 'path';
 import {fileURLToPath} from 'url';
 import {describe, expect, it, vi} from 'vitest';
-import {addEntity, deleteEntity, loadSchemas, parseSchema, schemaTools, updateEntity} from '../src/schemas.js';
+import {
+    addEntity, deleteEntity, loadSchemas, parseSchema, schemaTools, schemaWarnings, updateEntity,
+} from '../src/schemas.js';
 import type {Graph} from '../src/types.js';
 
 const npc = parseSchema({
@@ -45,6 +47,44 @@ describe('parseSchema', () => {
         expect(() => parseSchema({...base, properties: {a: {type: 'string'}}})).toThrow('property "a"');
         expect(() => parseSchema({...base, properties: {a: {type: 'string', description: 'd', relationship: {}}}}))
             .toThrow('edgeType');
+    });
+
+    it('rejects anything that would produce a malformed tool definition', () => {
+        const base = {name: 'add_x', description: 'd', properties: {}};
+        const withProp = (prop: unknown) => ({...base, properties: {a: prop}});
+        expect(() => parseSchema([])).toThrow('must be a JSON object');
+        expect(() => parseSchema({...base, properties: []})).toThrow('"properties" must be an object');
+        expect(() => parseSchema({...base, name: 'add_' + 'x'.repeat(58)})).toThrow('too long');
+        expect(() => parseSchema(withProp('string'))).toThrow('property "a"');
+        expect(() => parseSchema(withProp({type: 'string', description: 'd', enum: 'a, b'}))).toThrow('"enum"');
+        expect(() => parseSchema(withProp({type: 'string', description: 'd', enum: []}))).toThrow('"enum"');
+        expect(() => parseSchema(withProp({type: 'string', description: 'd', enum: ['a', 1]}))).toThrow('"enum"');
+        expect(() => parseSchema(withProp({type: 'string', description: 'd', relationship: 'located_in'})))
+            .toThrow('edgeType');
+        expect(parseSchema({...base, name: 'add_' + 'x'.repeat(57)}).entity).toHaveLength(57);
+    });
+});
+
+describe('schemaWarnings', () => {
+    it('finds nothing wrong with a normal schema', () => {
+        expect(schemaWarnings(npc)).toEqual([]);
+    });
+
+    it('points out settings that will not behave as expected', () => {
+        const warnings = schemaWarnings(parseSchema({
+            name: 'add_x',
+            description: 'd',
+            properties: {
+                age: {type: 'number', description: 'Age'},
+                metadata: {type: 'array', description: 'Notes'},
+                home: {type: 'string', description: 'Home', relationship: {edgeType: 'located_in'}},
+                work: {type: 'string', description: 'Work', relationship: {edgeType: 'located_in'}},
+            },
+        }));
+        expect(warnings).toHaveLength(3);
+        expect(warnings[0]).toContain('type "number"');
+        expect(warnings[1]).toContain('"metadata" clashes');
+        expect(warnings[2]).toContain('"home" and "work" share the edgeType "located_in"');
     });
 });
 
@@ -146,6 +186,56 @@ describe('addEntity', () => {
     it('rejects unknown fields only when additionalProperties is false', () => {
         const strict = parseSchema({name: 'add_x', description: 'd', properties: {}, additionalProperties: false});
         expect(() => addEntity(world(), strict, {name: 'A', bogus: 1})).toThrow('Unknown field(s) for x: bogus');
+    });
+});
+
+describe('enum fields', () => {
+    it('rejects values outside the enum when adding, and saves nothing', () => {
+        const g = world();
+        expect(() => addEntity(g, npc, {name: 'Bob', race: 'Dwarf', currentLocation: 'Town'}))
+            .toThrow('Invalid value for "race": "Dwarf". Allowed values: Human, Elf');
+        expect(g).toEqual(world());
+    });
+
+    it('rejects values outside the enum when updating', () => {
+        const g = world();
+        addEntity(g, npc, {name: 'Bob', race: 'Human', currentLocation: 'Town'});
+        expect(() => updateEntity(g, npc, {name: 'Bob', race: 'human'})).toThrow('Allowed values: Human, Elf');
+        expect(updateEntity(g, npc, {name: 'Bob', race: 'Elf'}).node.metadata).toContain('race: Elf');
+    });
+
+    it('checks every item of an array field', () => {
+        const schema = parseSchema({
+            name: 'add_item',
+            description: 'd',
+            properties: {tags: {type: 'array', description: 'Tags', enum: ['rare', 'cursed']}},
+        });
+        expect(() => addEntity(world(), schema, {name: 'Ring', tags: ['rare', 'shiny', 7]}))
+            .toThrow('Invalid value for "tags": "shiny", 7.');
+        expect(addEntity(world(), schema, {name: 'Ring', tags: ['rare', 'cursed']}).node.metadata)
+            .toEqual(['tags: rare, cursed']);
+    });
+});
+
+describe('empty lists', () => {
+    it('are not stored when adding, and do not satisfy a required field', () => {
+        const {node, edges} = addEntity(world(), npc, {
+            name: 'Bob', race: 'Human', currentLocation: 'Town', traits: [], allies: [],
+        });
+        expect(node.metadata).toEqual(['name: Bob', 'race: Human', 'currentLocation: Town']);
+        expect(edges.map(e => e.edgeType)).toEqual(['located_in']);
+        expect(() => addEntity(world(), npc, {name: 'Bob', race: 'Human', currentLocation: []}))
+            .toThrow('Missing required field(s) for npc: currentLocation');
+    });
+
+    it('clear the field and its relationship edges when updating', () => {
+        const g = world();
+        addEntity(g, npc, {name: 'Bob', race: 'Human', currentLocation: 'Town', traits: ['brave']});
+        const {node, removedEdges, addedEdges} = updateEntity(g, npc, {name: 'Bob', currentLocation: [], traits: []});
+        expect(node.metadata).toEqual(['name: Bob', 'race: Human']);
+        expect(removedEdges.map(e => e.to)).toEqual(['Town']);
+        expect(addedEdges).toEqual([]);
+        expect(g.edges).toEqual([]);
     });
 });
 

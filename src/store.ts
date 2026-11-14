@@ -1,6 +1,25 @@
 import {promises as fs} from 'fs';
 import path from 'path';
-import type {Graph} from './types.js';
+import type {Edge, Graph, Node} from './types.js';
+
+const isString = (value: unknown): value is string => typeof value === 'string';
+
+/** Returns the record as a node if it is one, filling in a missing metadata list. */
+function asNode(item: any): Node | undefined {
+    if (item?.type !== 'node' || !isString(item.name) || !isString(item.nodeType)) return undefined;
+    const metadata = Array.isArray(item.metadata)
+        ? item.metadata.map((entry: unknown) => (isString(entry) ? entry : JSON.stringify(entry)))
+        : [];
+    return {...item, metadata};
+}
+
+/** Returns the record as an edge if it is one. */
+function asEdge(item: any): Edge | undefined {
+    if (item?.type !== 'edge' || !isString(item.from) || !isString(item.to) || !isString(item.edgeType)) {
+        return undefined;
+    }
+    return item;
+}
 
 /**
  * Persists the graph as a JSON Lines file: one node or edge per line.
@@ -8,9 +27,9 @@ import type {Graph} from './types.js';
  * Every read/update loads the file fresh, and calls are queued so that two
  * tool calls arriving at the same time cannot overwrite each other's changes.
  *
- * Lines that are valid JSON but neither a node nor an edge (for example records
- * written by another tool) are not part of the graph, but are kept as they are
- * whenever the file is rewritten.
+ * Lines that are valid JSON but not a well-formed node or edge (for example
+ * records written by another tool, or a hand-edited node without a name) are
+ * not part of the graph, but are kept as they are whenever the file is rewritten.
  */
 export class GraphStore {
     private queue: Promise<unknown> = Promise.resolve();
@@ -68,15 +87,17 @@ export class GraphStore {
                     `Fix or remove that line, then try again.`
                 );
             }
-            if (item?.type === 'node') graph.nodes.push(item);
-            else if (item?.type === 'edge') graph.edges.push(item);
+            const node = asNode(item);
+            const edge = node ? undefined : asEdge(item);
+            if (node) graph.nodes.push(node);
+            else if (edge) graph.edges.push(edge);
             else otherLines.push(line.trim());
         });
 
         if (otherLines.length > 0 && !this.warnedAboutOtherLines) {
             this.warnedAboutOtherLines = true;
             console.error(
-                `[memorymesh] ${this.file} has ${otherLines.length} line(s) that are neither a node nor an edge. ` +
+                `[memorymesh] ${this.file} has ${otherLines.length} line(s) that are not a valid node or edge. ` +
                 `They are not part of the graph, and are kept unchanged.`
             );
         }
