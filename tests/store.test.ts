@@ -34,6 +34,30 @@ describe('GraphStore', () => {
         expect(g.edges).toHaveLength(1);
     });
 
+    it('keeps records it does not understand when it rewrites the file', async () => {
+        const other = [
+            '{"type":"entity","name":"Old","entityType":"person","observations":["from another tool"]}',
+            '{"type":"relation","from":"Old","to":"Older","relationType":"knows"}',
+            '42',
+        ];
+        writeFileSync(path.join(dir, 'm.json'), [
+            other[0],
+            '{"type":"node","name":"A","nodeType":"t","metadata":[]}',
+            other[1],
+            other[2],
+        ].join('\n') + '\n');
+        const store = new GraphStore(path.join(dir, 'm.json'));
+
+        expect((await store.read()).nodes.map(n => n.name)).toEqual(['A']);
+        await store.update(g => addNodes(g, [{name: 'B', nodeType: 't'}]));
+        await store.update(g => addNodes(g, [{name: 'C', nodeType: 't'}]));
+
+        const lines = readFileSync(path.join(dir, 'm.json'), 'utf-8').trimEnd().split('\n');
+        expect(lines).toHaveLength(6);
+        expect(lines.slice(3)).toEqual(other);
+        expect((await store.read()).nodes.map(n => n.name)).toEqual(['A', 'B', 'C']);
+    });
+
     it('writes nothing when the change throws', async () => {
         const store = new GraphStore(file);
         await store.update(g => addNodes(g, [{name: 'A', nodeType: 't', metadata: ['keep']}]));
