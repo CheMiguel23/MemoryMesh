@@ -18,6 +18,19 @@ export const ANNOTATIONS = {
     change: {readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false},
 } satisfies Record<string, ToolAnnotations>;
 
+/** The `fields` argument: an object whose values are a text or a list of texts. */
+const FIELDS = (description: string) => ({
+    type: "object",
+    description,
+    properties: {},
+    additionalProperties: {
+        anyOf: [
+            {type: "string"},
+            {type: "array", items: {type: "string"}},
+        ],
+    },
+});
+
 export const staticTools: Tool[] = [
     // --- Nodes and edges ---
     {
@@ -36,13 +49,14 @@ export const staticTools: Tool[] = [
                         properties: {
                             name: {type: "string", description: "The name of the node"},
                             nodeType: {type: "string", description: "The type of the node"},
+                            fields: FIELDS("Structured facts about the node, e.g. {\"status\": \"injured\", \"traits\": [\"brave\"]}"),
                             metadata: {
                                 type: "array",
-                                items: {type: "string", description: "Metadata item"},
-                                description: "An array of metadata contents associated with the node"
+                                items: {type: "string", description: "One note"},
+                                description: "Free-form notes about the node"
                             },
                         },
-                        required: ["name", "nodeType", "metadata"],
+                        required: ["name", "nodeType"],
                     },
                 },
             },
@@ -52,7 +66,7 @@ export const staticTools: Tool[] = [
 
     {
         name: "update_nodes",
-        description: "Update existing nodes in the knowledge graph: rename them, change their type, or replace their metadata. Only the fields you pass are changed",
+        description: "Update existing nodes in the knowledge graph: rename them, change their type, set fields, or replace their notes. Only what you pass is changed",
         annotations: ANNOTATIONS.change,
         inputSchema: {
             type: "object",
@@ -70,10 +84,11 @@ export const staticTools: Tool[] = [
                                 description: "A new name for the node. Its edges, and metadata of linked nodes that refers to it by name, are updated to match"
                             },
                             nodeType: {type: "string", description: "The new type of the node"},
+                            fields: FIELDS("Fields to set. Fields that are not mentioned keep their value; an empty value removes a field"),
                             metadata: {
                                 type: "array",
-                                items: {type: "string", description: "Metadata item"},
-                                description: "An array of new metadata contents for the node"
+                                items: {type: "string", description: "One note"},
+                                description: "Free-form notes that replace all existing notes of the node"
                             },
                         },
                         required: ["name"],
@@ -207,14 +222,14 @@ export const staticTools: Tool[] = [
 
     {
         name: "search_nodes",
-        description: "Search for nodes in the knowledge graph. Returns the nodes that contain every word of the query in their name, type or metadata, plus their direct neighbours",
+        description: "Search for nodes in the knowledge graph. Returns the nodes that contain every word of the query in their name, type, fields or notes, plus their direct neighbours",
         annotations: ANNOTATIONS.read,
         inputSchema: {
             type: "object",
             properties: {
                 query: {
                     type: "string",
-                    description: "One or more words to match (case-insensitive) against node names, types, and metadata content"
+                    description: "One or more words to match (case-insensitive) against node names, types, fields and notes"
                 },
             },
             required: ["query"],
@@ -241,7 +256,7 @@ export const staticTools: Tool[] = [
     // --- Metadata ---
     {
         name: "add_metadata",
-        description: "Add new metadata to existing nodes in the knowledge graph",
+        description: "Add free-form notes (metadata) to existing nodes in the knowledge graph",
         annotations: ANNOTATIONS.addOnce,
         inputSchema: {
             type: "object",
@@ -270,7 +285,7 @@ export const staticTools: Tool[] = [
 
     {
         name: "delete_metadata",
-        description: "Delete specific metadata from nodes in the knowledge graph",
+        description: "Delete specific free-form notes (metadata) from nodes in the knowledge graph",
         annotations: ANNOTATIONS.change,
         inputSchema: {
             type: "object",

@@ -1,5 +1,20 @@
 ## Changelog
 
+### Unreleased
+
+- **Fields are stored as fields.** A node now has `fields`, e.g. `{"status": "injured", "traits": ["brave", "kind"]}`, next to `metadata`, which is a list of free-form notes. The schema tools used to flatten every field into a `"key: value"` note, which lost its type and had to be guessed back apart.
+  - A relationship field is stored only as edges. The node no longer keeps a second copy of the names it links to, so nothing goes stale when a node is renamed.
+  - The node's name is no longer repeated as a `name: ...` note.
+  - A list field is stored as a list, and a single value given for a list field becomes a one-item list. A list or object given for a text field is rejected.
+  - `add_<entity>` accepts `metadata` for notes, and `update_<entity>`'s `metadata` replaces the notes only, not the fields.
+  - An empty value (`""` or `[]`) clears a field. A required field cannot be cleared.
+  - `add_nodes` and `update_nodes` accept `fields`. `add_nodes` no longer requires `metadata`.
+- **Existing memory is converted automatically.** On the first start, notes that belong to a field of the node's schema are moved into `fields`. The file as it was is kept next to it as `memory.json.before-fields.bak`. Notes that match no schema field stay notes.
+- **`search_nodes` also looks at fields and at what a node links to**, so `blacksmith riverton` finds the blacksmith whose location is recorded only as an edge to Riverton.
+- **MemoryViewer shows fields** together with the notes.
+
+---
+
 ### v0.6.0 (2026-11-14)
 
 - **Nodes can be renamed.** `update_nodes` accepts `newName`. The node's edges follow, and so does metadata that refers to it by name: its own `name: ...` entry, and entries such as `currentLocation: Town` on nodes linked to it.

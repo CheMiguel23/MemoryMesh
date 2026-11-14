@@ -4,7 +4,7 @@ import path from 'path';
 import {fileURLToPath} from 'url';
 import {describe, expect, it, vi} from 'vitest';
 import {
-    addEntity, deleteEntity, loadSchemas, parseSchema, schemaTools, schemaWarnings, updateEntity,
+    addEntity, convertNotesToFields, deleteEntity, loadSchemas, parseSchema, schemaTools, schemaWarnings, updateEntity,
 } from '../src/schemas.js';
 import type {Graph} from '../src/types.js';
 
@@ -147,17 +147,49 @@ describe('schemaTools', () => {
 });
 
 describe('addEntity', () => {
-    it('creates the node, its metadata and relationship edges', () => {
+    it('stores fields as fields, relationships as edges, and notes as metadata', () => {
         const g = world();
         const {node, edges} = addEntity(g, npc, {
             name: 'Bob', race: 'Human', traits: ['brave', 'loud'], currentLocation: 'Town', mood: 'happy',
+            metadata: ['met in chapter 2'],
         });
-        expect(node.metadata).toEqual([
-            'name: Bob', 'race: Human', 'traits: brave, loud', 'currentLocation: Town', 'mood: happy',
-        ]);
+        expect(node).toEqual({
+            type: 'node',
+            name: 'Bob',
+            nodeType: 'npc',
+            // No "name" (the node has one) and no "currentLocation" (the edge is the record).
+            fields: {race: 'Human', traits: ['brave', 'loud'], mood: 'happy'},
+            metadata: ['met in chapter 2'],
+        });
+        expect(Object.keys(node)).toEqual(['type', 'name', 'nodeType', 'fields', 'metadata']);
         expect(edges).toEqual([{type: 'edge', from: 'Bob', to: 'Town', edgeType: 'located_in'}]);
         expect(g.nodes).toContain(node);
         expect(g.edges).toEqual(edges);
+    });
+
+    it('stores each field in the type its schema gives it', () => {
+        const {node} = addEntity(world(), npc, {
+            name: 'Bob', race: 'Human', currentLocation: 'Town',
+            traits: 'brave',            // one value for a list field
+            age: 42, retired: false,    // extra fields that are not text
+            aliases: ['Bobby', 7],      // an extra list
+            home: {city: 'Town'},       // an extra object
+        });
+        expect(node.fields).toEqual({
+            race: 'Human', traits: ['brave'], age: '42', retired: 'false', aliases: ['Bobby', '7'], home: '{"city":"Town"}',
+        });
+        expect(() => addEntity(world(), npc, {name: 'Al', race: ['Human'], currentLocation: 'Town'}))
+            .toThrow('"race" must be a single text value');
+        expect(() => addEntity(world(), npc, {name: 'Al', race: 'Human', currentLocation: 'Town', traits: [{a: 1}]}))
+            .toThrow('"traits" must be a list of text values');
+        expect(() => addEntity(world(), npc, {name: 'Al', race: 'Human', currentLocation: 'Town', metadata: 'a note'}))
+            .toThrow('"metadata" must be an array');
+    });
+
+    it('leaves out "fields" when there are none', () => {
+        const place = parseSchema({name: 'add_place', description: 'd', properties: {}});
+        expect(addEntity(world(), place, {name: 'Cave'}).node)
+            .toEqual({type: 'node', name: 'Cave', nodeType: 'place', metadata: []});
     });
 
     it('accepts arrays for relationships and ignores repeated targets', () => {
@@ -167,6 +199,7 @@ describe('addEntity', () => {
 
     it('lists all missing required fields at once', () => {
         expect(() => addEntity(world(), npc, {name: 'Bob'})).toThrow('race, currentLocation');
+        expect(() => addEntity(world(), npc, {name: 'Bob', race: '  ', currentLocation: []})).toThrow('race, currentLocation');
     });
 
     it('explains a missing relationship target and changes nothing', () => {
@@ -180,7 +213,6 @@ describe('addEntity', () => {
         const g = world();
         const {node, edges} = addEntity(g, npc, {name: ' Bob ', race: 'Human', currentLocation: 'Town'});
         expect(node.name).toBe('Bob');
-        expect(node.metadata[0]).toBe('name: Bob');
         expect(edges[0].from).toBe('Bob');
         expect(() => addEntity(g, npc, {name: 'Bob  ', race: 'Human', currentLocation: 'Town'})).toThrow('already exists');
     });
@@ -195,6 +227,7 @@ describe('addEntity', () => {
     it('rejects unknown fields only when additionalProperties is false', () => {
         const strict = parseSchema({name: 'add_x', description: 'd', properties: {}, additionalProperties: false});
         expect(() => addEntity(world(), strict, {name: 'A', bogus: 1})).toThrow('Unknown field(s) for x: bogus');
+        expect(addEntity(world(), strict, {name: 'A', metadata: ['a note']}).node.metadata).toEqual(['a note']);
     });
 });
 
@@ -210,7 +243,7 @@ describe('enum fields', () => {
         const g = world();
         addEntity(g, npc, {name: 'Bob', race: 'Human', currentLocation: 'Town'});
         expect(() => updateEntity(g, npc, {name: 'Bob', race: 'human'})).toThrow('Allowed values: Human, Elf');
-        expect(updateEntity(g, npc, {name: 'Bob', race: 'Elf'}).node.metadata).toContain('race: Elf');
+        expect(updateEntity(g, npc, {name: 'Bob', race: 'Elf'}).node.fields).toEqual({race: 'Elf'});
     });
 
     it('checks every item of an array field', () => {
@@ -221,61 +254,72 @@ describe('enum fields', () => {
         });
         expect(() => addEntity(world(), schema, {name: 'Ring', tags: ['rare', 'shiny', 7]}))
             .toThrow('Invalid value for "tags": "shiny", 7.');
-        expect(addEntity(world(), schema, {name: 'Ring', tags: ['rare', 'cursed']}).node.metadata)
-            .toEqual(['tags: rare, cursed']);
+        expect(addEntity(world(), schema, {name: 'Ring', tags: ['rare', 'cursed']}).node.fields)
+            .toEqual({tags: ['rare', 'cursed']});
     });
 });
 
-describe('empty lists', () => {
-    it('are not stored when adding, and do not satisfy a required field', () => {
+describe('blank values', () => {
+    it('are not stored when adding', () => {
         const {node, edges} = addEntity(world(), npc, {
-            name: 'Bob', race: 'Human', currentLocation: 'Town', traits: [], allies: [],
+            name: 'Bob', race: 'Human', currentLocation: 'Town', traits: [], allies: [], mood: '',
         });
-        expect(node.metadata).toEqual(['name: Bob', 'race: Human', 'currentLocation: Town']);
+        expect(node.fields).toEqual({race: 'Human'});
         expect(edges.map(e => e.edgeType)).toEqual(['located_in']);
-        expect(() => addEntity(world(), npc, {name: 'Bob', race: 'Human', currentLocation: []}))
-            .toThrow('Missing required field(s) for npc: currentLocation');
     });
 
-    it('clear the field and its relationship edges when updating', () => {
+    it('clear a field, or the edges of a relationship field, when updating', () => {
         const g = world();
-        addEntity(g, npc, {name: 'Bob', race: 'Human', currentLocation: 'Town', traits: ['brave']});
-        const {node, removedEdges, addedEdges} = updateEntity(g, npc, {name: 'Bob', currentLocation: [], traits: []});
-        expect(node.metadata).toEqual(['name: Bob', 'race: Human']);
-        expect(removedEdges.map(e => e.to)).toEqual(['Town']);
+        addEntity(g, npc, {name: 'Bob', race: 'Human', currentLocation: 'Town', traits: ['brave'], mood: 'calm', allies: ['Town']});
+        const {node, removedEdges, addedEdges} = updateEntity(g, npc, {name: 'Bob', traits: [], mood: '', allies: []});
+        expect(node.fields).toEqual({race: 'Human'});
+        expect(removedEdges.map(e => e.edgeType)).toEqual(['allied_with']);
         expect(addedEdges).toEqual([]);
-        expect(g.edges).toEqual([]);
+        expect(g.edges.map(e => e.edgeType)).toEqual(['located_in']);
+    });
+
+    it('cannot clear a required field', () => {
+        const g = world();
+        addEntity(g, npc, {name: 'Bob', race: 'Human', currentLocation: 'Town'});
+        expect(() => updateEntity(g, npc, {name: 'Bob', race: ''})).toThrow('"race" is required for npc and cannot be cleared');
+        expect(() => updateEntity(g, npc, {name: 'Bob', currentLocation: []})).toThrow('"currentLocation" is required');
     });
 });
 
 describe('updateEntity', () => {
     function withBob(): Graph {
         const g = world();
-        addEntity(g, npc, {name: 'Bob', race: 'Human', currentLocation: 'Town'});
-        g.nodes[2].metadata.push('a note without a colon', 'Mood: calm');
+        addEntity(g, npc, {name: 'Bob', race: 'Human', currentLocation: 'Town', mood: 'calm', metadata: ['a note']});
         return g;
     }
 
-    it('replaces matching entries in place, keeping key spelling and unrelated notes', () => {
-        const g = withBob();
-        const {node} = updateEntity(g, npc, {name: 'Bob', race: 'Elf', mood: 'angry', title: 'Sir'});
-        expect(node.metadata).toEqual([
-            'name: Bob', 'race: Elf', 'currentLocation: Town', 'a note without a colon', 'mood: angry', 'title: Sir',
-        ]);
+    it('changes only the fields that are passed', () => {
+        const {node} = updateEntity(withBob(), npc, {name: 'Bob', race: 'Elf', title: 'Sir'});
+        expect(node.fields).toEqual({race: 'Elf', mood: 'calm', title: 'Sir'});
+        expect(node.metadata).toEqual(['a note']);
     });
 
     it('replaces relationship edges', () => {
         const g = withBob();
-        const {removedEdges, addedEdges} = updateEntity(g, npc, {name: 'Bob', currentLocation: 'Forest'});
+        const {node, removedEdges, addedEdges} = updateEntity(g, npc, {name: 'Bob', currentLocation: 'Forest'});
         expect(removedEdges.map(e => e.to)).toEqual(['Town']);
         expect(addedEdges.map(e => e.to)).toEqual(['Forest']);
         expect(g.edges).toEqual([{type: 'edge', from: 'Bob', to: 'Forest', edgeType: 'located_in'}]);
-        expect(g.nodes[2].metadata).toContain('currentLocation: Forest');
+        expect(node.fields).toEqual({race: 'Human', mood: 'calm'});
     });
 
-    it('replaces the whole metadata list when "metadata" is given', () => {
-        const {node} = updateEntity(withBob(), npc, {name: 'Bob', metadata: ['fresh: start'], race: 'Elf'});
-        expect(node.metadata).toEqual(['fresh: start', 'race: Elf']);
+    it('replaces the notes, and only the notes, when "metadata" is given', () => {
+        const {node} = updateEntity(withBob(), npc, {name: 'Bob', metadata: ['fresh start'], race: 'Elf'});
+        expect(node.metadata).toEqual(['fresh start']);
+        expect(node.fields).toEqual({race: 'Elf', mood: 'calm'});
+    });
+
+    it('removes an old-style "key: value" note when the field it describes is set', () => {
+        const g = withBob();
+        g.nodes[2].metadata.push('Mood: calm', 'currentLocation: Town', 'unrelated: note');
+        const {node} = updateEntity(g, npc, {name: 'Bob', mood: 'angry', currentLocation: 'Forest'});
+        expect(node.fields).toEqual({race: 'Human', mood: 'angry'});
+        expect(node.metadata).toEqual(['a note', 'unrelated: note']);
     });
 
     it('only updates nodes of its own type', () => {
@@ -295,5 +339,57 @@ describe('deleteEntity', () => {
 
     it('only deletes nodes of its own type', () => {
         expect(() => deleteEntity(world(), npc, {name: 'Town'})).toThrow('npc "Town" not found');
+    });
+});
+
+describe('convertNotesToFields', () => {
+    /** A graph as v0.6 wrote it: every field of the schema tools is a "key: value" note. */
+    function oldGraph(): Graph {
+        return {
+            nodes: [
+                {type: 'node', name: 'Town', nodeType: 'location', metadata: ['name: Town', 'description: A town']},
+                {
+                    type: 'node', name: 'Bob', nodeType: 'npc', metadata: [
+                        'name: Bob', 'race: Human', 'traits: brave, loud', 'currentLocation: Town',
+                        'Mood: calm', 'a note without a colon', 'allies: Ann',
+                    ],
+                },
+                {type: 'node', name: 'Rock', nodeType: 'thing', metadata: ['name: Rock', 'race: Stone']},
+            ],
+            edges: [{type: 'edge', from: 'Bob', to: 'Town', edgeType: 'located_in'}],
+        };
+    }
+
+    it('moves the notes of schema fields into fields', () => {
+        const g = oldGraph();
+        expect(convertNotesToFields(g, [npc])).toBe(1);
+        expect(g.nodes[1]).toEqual({
+            type: 'node',
+            name: 'Bob',
+            nodeType: 'npc',
+            fields: {race: 'Human', traits: ['brave', 'loud']},
+            // "currentLocation" is gone because the located_in edge records it. "allies" stays:
+            // there is no allied_with edge, so the note is the only record. "Mood" is not a schema field.
+            metadata: ['Mood: calm', 'a note without a colon', 'allies: Ann'],
+        });
+        expect(g.edges).toHaveLength(1);
+    });
+
+    it('leaves nodes without a schema alone, and changes nothing on a second run', () => {
+        const g = oldGraph();
+        convertNotesToFields(g, [npc]);
+        expect(g.nodes[0].metadata).toEqual(['name: Town', 'description: A town']);
+        expect(g.nodes[2].metadata).toEqual(['name: Rock', 'race: Stone']);
+        const after = structuredClone(g);
+        expect(convertNotesToFields(g, [npc])).toBe(0);
+        expect(g).toEqual(after);
+    });
+
+    it('never overwrites a field that already has a value', () => {
+        const g = oldGraph();
+        g.nodes[1].fields = {race: 'Elf'};
+        convertNotesToFields(g, [npc]);
+        expect(g.nodes[1].fields).toEqual({race: 'Elf', traits: ['brave', 'loud']});
+        expect(g.nodes[1].metadata).toContain('race: Human');
     });
 });

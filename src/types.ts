@@ -1,9 +1,18 @@
+/** The value of a structured field: a text, or a list of texts. */
+export type FieldValue = string | string[];
+
 /** A node (entity) in the knowledge graph. */
 export interface Node {
     type: 'node';
     name: string;
     nodeType: string;
-    /** Free-form facts about the node, usually written as "key: value". */
+    /**
+     * Structured facts about the node, keyed by field name, e.g.
+     * {"status": "injured", "traits": ["brave", "stubborn"]}.
+     * The schema tools store their fields here. Left out when there are none.
+     */
+    fields?: Record<string, FieldValue>;
+    /** Free-form notes about the node. */
     metadata: string[];
 }
 

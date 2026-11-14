@@ -7,7 +7,7 @@
  * either all changes are saved, or none are.
  */
 
-import type {Edge, Graph, Node} from './types.js';
+import type {Edge, FieldValue, Graph, Node} from './types.js';
 
 // ---------------------------------------------------------------------------
 // Input checks (tool arguments come from an AI, so nothing can be assumed)
@@ -40,6 +40,43 @@ function requireObject(value: unknown, what: string): Record<string, unknown> {
         throw new Error(`${what} must be an object`);
     }
     return value as Record<string, unknown>;
+}
+
+/** True for values that mean "nothing": blank text or an empty list. */
+export const isBlank = (value: unknown) =>
+    (typeof value === 'string' && value.trim() === '') || (Array.isArray(value) && value.length === 0);
+
+function requireFields(value: unknown, what: string): Record<string, FieldValue> {
+    const fields = requireObject(value, what);
+    for (const [key, item] of Object.entries(fields)) {
+        const isText = typeof item === 'string';
+        const isTextList = Array.isArray(item) && item.every(entry => typeof entry === 'string');
+        if (!isText && !isTextList) {
+            throw new Error(`${what}.${key} must be a string or an array of strings`);
+        }
+    }
+    return fields as Record<string, FieldValue>;
+}
+
+/** Sets one field of a node. A blank value removes the field. */
+export function setField(node: Node, key: string, value: FieldValue): void {
+    const fields = {...node.fields};
+    if (isBlank(value)) delete fields[key];
+    else fields[key] = value;
+
+    // Re-added in this order so that "fields" comes before "metadata" wherever the node is shown.
+    const {metadata} = node;
+    delete node.fields;
+    delete (node as Partial<Node>).metadata;
+    if (Object.keys(fields).length > 0) node.fields = fields;
+    node.metadata = metadata;
+}
+
+/** A node's fields written the way notes are, e.g. "traits: brave, stubborn". Used for searching. */
+function fieldLines(node: Node): string[] {
+    return Object.entries(node.fields ?? {}).map(([key, value]) =>
+        `${key}: ${Array.isArray(value) ? value.join(', ') : value}`
+    );
 }
 
 function checkWeight(weight: unknown): number | undefined {
@@ -87,6 +124,11 @@ export function addNodes(graph: Graph, input: unknown): Node[] {
             nodeType: requireString(item.nodeType, `nodes[${i}].nodeType`),
             metadata: requireStringArray(item.metadata ?? [], `nodes[${i}].metadata`),
         };
+        if (item.fields !== undefined) {
+            for (const [key, value] of Object.entries(requireFields(item.fields, `nodes[${i}].fields`))) {
+                setField(node, key, value);
+            }
+        }
         if (findNode(graph, node.name) || added.some(n => n.name === node.name)) {
             throw new Error(`Node already exists: "${node.name}". Update it instead of adding it again.`);
         }
@@ -106,6 +148,12 @@ export function updateNodes(graph: Graph, input: unknown): Node[] {
         }
         if (item.metadata !== undefined) {
             node.metadata = requireStringArray(item.metadata, `nodes[${i}].metadata`);
+        }
+        if (item.fields !== undefined) {
+            // Only the fields that are passed change; a blank value removes one.
+            for (const [key, value] of Object.entries(requireFields(item.fields, `nodes[${i}].fields`))) {
+                setField(node, key, value);
+            }
         }
         if (item.newName !== undefined) {
             renameNode(graph, node, requireString(item.newName, `nodes[${i}].newName`).trim());
@@ -128,9 +176,9 @@ function mapMetadataValue(entry: string, change: (key: string, value: string) =>
 /**
  * Renames a node everywhere it is referred to:
  *  - the edges that start or end at it,
- *  - its own "name: ..." metadata entry (schema tools store one),
- *  - metadata of nodes linking to it that names it, e.g. "currentLocation: Town"
- *    or "allies: Ann, Town" (schema tools store relationship targets this way).
+ *  - notes written by older versions, which kept a copy of names in metadata: the
+ *    node's own "name: ..." entry, and entries such as "currentLocation: Town" or
+ *    "allies: Ann, Town" on nodes linking to it.
  */
 function renameNode(graph: Graph, node: Node, newName: string): void {
     const oldName = node.name;
@@ -289,15 +337,26 @@ function withNeighbours(graph: Graph, matches: Node[]): Graph {
 }
 
 /**
- * Case-insensitive search over node names, types and metadata.
- * A node matches when every word of the query appears somewhere in it,
- * so "blacksmith riverton" finds a blacksmith whose metadata mentions Riverton.
+ * Case-insensitive search over node names, types, fields, notes and outgoing edges.
+ * A node matches when every word of the query appears somewhere in those.
  */
 export function searchNodes(graph: Graph, query: unknown): Graph {
     const words = requireString(query, '"query"').toLowerCase().split(/\s+/).filter(word => word !== '');
+
+    // What a node links to is part of what it is: "blacksmith riverton" should find
+    // the blacksmith whose only mention of Riverton is a located_in edge.
+    const links = new Map<string, string[]>();
+    for (const edge of graph.edges) {
+        links.set(edge.from, [...(links.get(edge.from) ?? []), `${edge.edgeType}: ${edge.to}`]);
+    }
+
     const matches = graph.nodes.filter(node => {
-        const text = [node.name, node.nodeType, ...node.metadata].join('\n').toLowerCase();
-        return words.every(word => text.includes(word));
+        const own = [node.name, node.nodeType, ...fieldLines(node), ...node.metadata].join('\n').toLowerCase();
+        const linked = (links.get(node.name) ?? []).join('\n').toLowerCase();
+        // At least one word must be about the node itself. Otherwise searching for "Riverton"
+        // would match everything that links to Riverton, and then pull in all of their neighbours too.
+        return words.some(word => own.includes(word)) &&
+            words.every(word => own.includes(word) || linked.includes(word));
     });
     return withNeighbours(graph, matches);
 }

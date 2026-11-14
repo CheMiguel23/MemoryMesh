@@ -145,17 +145,26 @@ describe('static tools', () => {
         expect((await call('read_graph')).text).toContain('(1 node, 0 edges)');
     });
 
-    it('update_nodes renames a node and everything that refers to it', async () => {
+    it('update_nodes renames a node, and its edges follow', async () => {
         await seedTown();
         await call('add_npc', {npc: {name: 'Bob', description: 'A man', currentLocation: ['Town']}});
         const r = await call('update_nodes', {nodes: [{name: 'Town', newName: 'Riverton'}]});
         expect(r.text).toContain('Updated 1 node: "Riverton"');
 
         const lines = memory().trimEnd().split('\n').map(line => JSON.parse(line));
-        expect(lines.find(l => l.nodeType === 'location').metadata).toContain('name: Riverton');
-        expect(lines.find(l => l.name === 'Bob').metadata).toContain('currentLocation: Riverton');
+        expect(lines.find(l => l.nodeType === 'location').name).toBe('Riverton');
         expect(lines.find(l => l.type === 'edge')).toMatchObject({from: 'Bob', to: 'Riverton'});
+        // Nothing keeps a copy of the old name, so nothing is left to go stale.
         expect(memory()).not.toContain('Town');
+    });
+
+    it('add_nodes and update_nodes work with fields', async () => {
+        await call('add_nodes', {nodes: [{name: 'Ring', nodeType: 'item', fields: {owner: 'Frodo', powers: ['invisibility']}}]});
+        const r = await call('update_nodes', {nodes: [{name: 'Ring', fields: {owner: 'Gollum', powers: [], age: 'ancient'}}]});
+        expect(r.text).toContain('"fields":{"owner":"Gollum","age":"ancient"}');
+        expect((await call('search_nodes', {query: 'owner: gollum'})).text).toContain('found 1 node');
+        expect((await call('add_nodes', {nodes: [{name: 'X', nodeType: 't', fields: {n: 1}}]})).text)
+            .toBe('Error: nodes[0].fields.n must be a string or an array of strings');
     });
 
     it('returns data as compact JSON after a one-line summary', async () => {
@@ -203,19 +212,20 @@ describe('schema tools', () => {
 
         const add = await call('add_npc', {npc: {
             name: 'Bob', role: 'Smith', status: 'alive', description: 'd', currentLocation: 'Town', mood: 'fine',
+            traits: ['gruff'],
         }});
         expect(add.text).toContain('Created npc: Bob');
         expect(memory()).toContain('"from":"Bob","to":"Town","edgeType":"located_in"');
 
-        await call('add_metadata', {metadata: [{nodeName: 'Bob', contents: ['a note without a colon']}]});
+        await call('add_metadata', {metadata: [{nodeName: 'Bob', contents: ['a note']}]});
         const update = await call('update_npc', {update_npc: {name: 'Bob', status: 'dead', currentLocation: 'Forest'}});
         expect(update.isError).toBe(false);
 
-        const bob = JSON.parse(memory().split('\n').find(line => line.includes('"name":"Bob"'))!);
-        expect(bob.metadata).toEqual([
-            'name: Bob', 'description: d', 'role: Smith', 'status: dead', 'currentLocation: Forest', 'mood: fine',
-            'a note without a colon',
-        ]);
+        expect(memory().split('\n').find(line => line.includes('"name":"Bob"'))).toBe(
+            '{"type":"node","name":"Bob","nodeType":"npc",' +
+            '"fields":{"description":"d","role":"Smith","status":"dead","traits":["gruff"],"mood":"fine"},' +
+            '"metadata":["a note"]}'
+        );
         expect(memory()).toContain('"from":"Bob","to":"Forest"');
         expect(memory()).not.toContain('"from":"Bob","to":"Town"');
 
@@ -240,11 +250,11 @@ describe('schema tools', () => {
         expect(r.text).toContain('"name":"Bob"');
     });
 
-    it('update_npc can replace all metadata', async () => {
+    it('update_npc can replace the notes without touching the fields', async () => {
         await seedTown();
-        await call('add_npc', {npc: {name: 'Bob', description: 'd', currentLocation: 'Town'}});
-        await call('update_npc', {update_npc: {name: 'Bob', metadata: ['fresh: start']}});
-        expect(memory()).toContain('"metadata":["fresh: start"]');
+        await call('add_npc', {npc: {name: 'Bob', description: 'd', currentLocation: 'Town', metadata: ['first note']}});
+        await call('update_npc', {update_npc: {name: 'Bob', metadata: ['fresh start']}});
+        expect(memory()).toContain('"fields":{"description":"d"},"metadata":["fresh start"]');
     });
 
     it('a location can be part of another location', async () => {

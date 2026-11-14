@@ -27,10 +27,10 @@
 
 import {promises as fs} from 'fs';
 import path from 'path';
-import {addEdges, deleteNodes, findNode, requireArray} from './graph.js';
+import {addEdges, deleteNodes, findNode, isBlank, requireArray, setField} from './graph.js';
 import {ANNOTATIONS} from './tools.js';
 import type {Tool} from '@modelcontextprotocol/sdk/types.js';
-import type {Edge, Graph, Node} from './types.js';
+import type {Edge, FieldValue, Graph, Node} from './types.js';
 
 export interface SchemaProperty {
     type: string;
@@ -206,6 +206,12 @@ function propertiesFor(schema: EntitySchema): Record<string, unknown> {
     return properties;
 }
 
+const notesProperty = (description: string) => ({
+    type: 'array',
+    description,
+    items: {type: 'string', description: 'One note'},
+});
+
 const additional = (schema: EntitySchema) =>
     schema.additionalProperties === false ? false : {type: 'string', description: 'Additional property value'};
 
@@ -225,7 +231,10 @@ export function schemaTools(schema: EntitySchema): Tool[] {
                 properties: {
                     [entity]: {
                         type: 'object',
-                        properties: propertiesFor(schema),
+                        properties: {
+                            ...propertiesFor(schema),
+                            metadata: notesProperty('Free-form notes that do not fit any of the fields'),
+                        },
                         required,
                         additionalProperties: additional(schema),
                     },
@@ -235,7 +244,7 @@ export function schemaTools(schema: EntitySchema): Tool[] {
         },
         {
             name: `update_${entity}`,
-            description: `Update an existing ${entity} in the knowledge graph`,
+            description: `Update an existing ${entity} in the knowledge graph. Only the fields you pass are changed; pass an empty value to clear a field`,
             annotations: ANNOTATIONS.change,
             inputSchema: {
                 type: 'object',
@@ -244,11 +253,7 @@ export function schemaTools(schema: EntitySchema): Tool[] {
                         type: 'object',
                         properties: {
                             ...propertiesFor(schema),
-                            metadata: {
-                                type: 'array',
-                                description: 'An array of metadata contents to replace the existing metadata',
-                                items: {type: 'string', description: 'Item in metadata array'},
-                            },
+                            metadata: notesProperty('Free-form notes. Replaces all existing notes of the node'),
                         },
                         required: ['name'],
                         additionalProperties: additional(schema),
@@ -294,34 +299,67 @@ function requireEntityArgs(value: unknown, key: string, entity: string): Record<
     return args as Record<string, unknown> & { name: string };
 }
 
-function rejectUnknownFields(schema: EntitySchema, args: Record<string, unknown>, allowed: string[] = []): void {
+/** Arguments of the schema tools that are not fields of the entity. */
+const NOT_FIELDS = ['name', 'metadata'];
+
+function rejectUnknownFields(schema: EntitySchema, args: Record<string, unknown>): void {
     if (schema.additionalProperties !== false) return;
-    const unknown = Object.keys(args).filter(
-        key => key !== 'name' && !allowed.includes(key) && !(key in schema.properties)
-    );
+    const unknown = Object.keys(args).filter(key => !NOT_FIELDS.includes(key) && !(key in schema.properties));
     if (unknown.length > 0) {
         throw new Error(`Unknown field(s) for ${schema.entity}: ${unknown.join(', ')}`);
     }
 }
 
-function formatValue(value: unknown): string {
-    if (Array.isArray(value)) return value.map(formatValue).join(', ');
-    if (typeof value === 'object' && value !== null) return JSON.stringify(value);
-    return String(value);
+const isSet = (value: unknown) => value !== undefined && value !== null;
+
+/** True when a field was given a value worth storing (blank text and empty lists are not). */
+const hasValue = (value: unknown) => isSet(value) && !isBlank(value);
+
+/** Tool arguments are not validated by the client or the SDK, so enums are enforced here. */
+function rejectInvalidEnumValues(schema: EntitySchema, args: Record<string, unknown>): void {
+    for (const [field, prop] of Object.entries(schema.properties)) {
+        // Relationship fields hold node names, so their enum is not advertised or enforced.
+        if (!prop.enum || prop.relationship || !hasValue(args[field])) continue;
+        const value = args[field];
+        const invalid = (Array.isArray(value) ? value : [value]).filter(item => !prop.enum!.includes(item as string));
+        if (invalid.length > 0) {
+            throw new Error(
+                `Invalid value for "${field}": ${invalid.map(item => JSON.stringify(item)).join(', ')}. ` +
+                `Allowed values: ${prop.enum.join(', ')}`
+            );
+        }
+    }
 }
 
-function metadataKey(entry: string): string | null {
+const isScalar = (value: unknown): value is string | number | boolean =>
+    typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+
+/**
+ * Turns a tool argument into the value stored for a field, following the type
+ * the schema gives it. Fields the schema does not list are stored as they come.
+ */
+function fieldValue(field: string, prop: SchemaProperty | undefined, value: unknown): FieldValue {
+    const isList = Array.isArray(value) && value.every(isScalar);
+    if (prop?.type === 'array') {
+        if (isList) return (value as unknown[]).map(String);
+        if (isScalar(value)) return [String(value)];
+        throw new Error(`"${field}" must be a list of text values`);
+    }
+    if (isScalar(value)) return String(value);
+    if (prop) throw new Error(`"${field}" must be a single text value, not a list or an object`);
+    return isList ? (value as unknown[]).map(String) : JSON.stringify(value);
+}
+
+function notes(value: unknown): string[] {
+    const list = requireArray(value, 'metadata');
+    if (!list.every(isScalar)) throw new Error('Every item in "metadata" must be text');
+    return list.map(String);
+}
+
+/** The key of a "key: value" note, lower-cased; null for notes without a colon. */
+function noteKey(entry: string): string | null {
     const colon = entry.indexOf(':');
     return colon === -1 ? null : entry.slice(0, colon).trim().toLowerCase();
-}
-
-/** Sets "key: value" in a metadata list, replacing an existing entry for the same key (case-insensitive). */
-function setMetadata(metadata: string[], key: string, value: string): string[] {
-    const entry = `${key}: ${value}`;
-    const matches = (e: string) => metadataKey(e) === key.toLowerCase();
-    const index = metadata.findIndex(matches);
-    if (index === -1) return [...metadata, entry];
-    return metadata.flatMap((e, i) => (i === index ? [entry] : matches(e) ? [] : [e]));
 }
 
 /** Builds the edges a relationship field implies, checking every target exists first. */
@@ -341,28 +379,13 @@ function relationshipEdges(graph: Graph, from: string, field: string, edgeType: 
     });
 }
 
-const isSet = (value: unknown) => value !== undefined && value !== null;
-const isEmptyList = (value: unknown) => Array.isArray(value) && value.length === 0;
-
-/** True when a field was given a value worth storing (an empty list is not). */
-const hasValue = (value: unknown) => isSet(value) && !isEmptyList(value);
-
-/** Tool arguments are not validated by the client or the SDK, so enums are enforced here. */
-function rejectInvalidEnumValues(schema: EntitySchema, args: Record<string, unknown>): void {
-    for (const [field, prop] of Object.entries(schema.properties)) {
-        // Relationship fields hold node names, so their enum is not advertised or enforced.
-        if (!prop.enum || prop.relationship || !isSet(args[field])) continue;
-        const value = args[field];
-        const invalid = (Array.isArray(value) ? value : [value]).filter(item => !prop.enum!.includes(item as string));
-        if (invalid.length > 0) {
-            throw new Error(
-                `Invalid value for "${field}": ${invalid.map(item => JSON.stringify(item)).join(', ')}. ` +
-                `Allowed values: ${prop.enum.join(', ')}`
-            );
-        }
-    }
-}
-
+/**
+ * Creates a node from a schema tool's arguments:
+ *  - the name becomes the node's name,
+ *  - relationship fields become edges (and only edges: the edge is the single record of the link),
+ *  - every other field is stored in the node's `fields`,
+ *  - `metadata`, if given, becomes its free-form notes.
+ */
 export function addEntity(graph: Graph, schema: EntitySchema, input: unknown): { node: Node; edges: Edge[] } {
     const {entity, properties} = schema;
     const args = requireEntityArgs(input, entity, entity);
@@ -379,26 +402,35 @@ export function addEntity(graph: Graph, schema: EntitySchema, input: unknown): {
         throw new Error(`Missing required field(s) for ${entity}: ${missing.join(', ')}`);
     }
 
+    const node: Node = {
+        type: 'node',
+        name: args.name,
+        nodeType: entity,
+        metadata: isSet(args.metadata) ? notes(args.metadata) : [],
+    };
     // Schema fields first (in schema order), then any extra fields.
-    const fields = [...Object.keys(properties), ...Object.keys(args).filter(key => !(key in properties) && key !== 'name')];
-    const metadata: string[] = [];
+    const fields = [...Object.keys(properties), ...Object.keys(args).filter(key => !(key in properties))];
     const edges: Edge[] = [];
     for (const field of fields) {
         const value = args[field];
-        if (!hasValue(value)) continue;
-        metadata.push(`${field}: ${formatValue(value)}`);
+        if (NOT_FIELDS.includes(field) || !hasValue(value)) continue;
         const relationship = properties[field]?.relationship;
         if (relationship) {
             edges.push(...relationshipEdges(graph, args.name, field, relationship.edgeType, value));
+        } else {
+            setField(node, field, fieldValue(field, properties[field], value));
         }
     }
 
-    const node: Node = {type: 'node', name: args.name, nodeType: entity, metadata};
     graph.nodes.push(node);
     addEdges(graph, edges);
     return {node, edges};
 }
 
+/**
+ * Changes the fields that are passed and leaves the rest alone. A blank value
+ * ("" or []) clears a field; `metadata` replaces the node's free-form notes.
+ */
 export function updateEntity(
     graph: Graph,
     schema: EntitySchema,
@@ -406,7 +438,7 @@ export function updateEntity(
 ): { node: Node; removedEdges: Edge[]; addedEdges: Edge[] } {
     const {entity, properties} = schema;
     const args = requireEntityArgs(input, `update_${entity}`, entity);
-    rejectUnknownFields(schema, args, ['metadata']);
+    rejectUnknownFields(schema, args);
     rejectInvalidEnumValues(schema, args);
 
     const node = findNode(graph, args.name);
@@ -415,17 +447,15 @@ export function updateEntity(
         throw new Error(`${entity} "${args.name}" not found${hint}`);
     }
 
-    // "metadata" replaces the whole list; individual fields then update their own entries.
-    let metadata = isSet(args.metadata) ? requireArray(args.metadata, 'metadata').map(String) : [...node.metadata];
+    if (isSet(args.metadata)) node.metadata = notes(args.metadata);
     const removedEdges: Edge[] = [];
     const addedEdges: Edge[] = [];
 
     for (const [field, value] of Object.entries(args)) {
-        if (field === 'name' || field === 'metadata' || !isSet(value)) continue;
-        // An empty list clears the field instead of leaving an empty "field: " entry behind.
-        metadata = isEmptyList(value)
-            ? metadata.filter(entry => metadataKey(entry) !== field.toLowerCase())
-            : setMetadata(metadata, field, formatValue(value));
+        if (NOT_FIELDS.includes(field) || !isSet(value)) continue;
+        if (isBlank(value) && properties[field]?.required) {
+            throw new Error(`"${field}" is required for ${entity} and cannot be cleared`);
+        }
 
         const relationship = properties[field]?.relationship;
         if (relationship) {
@@ -435,10 +465,13 @@ export function updateEntity(
             graph.edges = graph.edges.filter(e => !old.includes(e));
             removedEdges.push(...old);
             addedEdges.push(...addEdges(graph, newEdges));
+        } else {
+            setField(node, field, isBlank(value) ? '' : fieldValue(field, properties[field], value));
         }
+        // A note such as "status: injured" (how older versions stored fields) would now contradict the field.
+        node.metadata = node.metadata.filter(entry => noteKey(entry) !== field.toLowerCase());
     }
 
-    node.metadata = metadata;
     return {node, removedEdges, addedEdges};
 }
 
@@ -450,4 +483,54 @@ export function deleteEntity(graph: Graph, schema: EntitySchema, input: unknown)
     }
     deleteNodes(graph, [node.name]);
     return node.name;
+}
+
+// ---------------------------------------------------------------------------
+// Converting memory written by older versions
+// ---------------------------------------------------------------------------
+
+/**
+ * Up to v0.6 the schema tools stored everything as "key: value" notes in a node's
+ * metadata, e.g. ["name: Mara", "status: injured", "traits: brave, kind", "currentLocation: Town"].
+ * This moves those notes to where they belong now:
+ *  - "name: <the node's name>" is dropped (the node already has its name),
+ *  - a relationship field is dropped when the node has edges of that type (the edges are the record),
+ *  - any other field of the node's schema moves into `fields`.
+ * Notes that match no schema field, and nodes of a type without a schema, are left alone.
+ * Safe to run repeatedly. Returns the number of nodes changed.
+ */
+export function convertNotesToFields(graph: Graph, schemas: EntitySchema[]): number {
+    let changed = 0;
+    for (const node of graph.nodes) {
+        const schema = schemas.find(s => s.entity === node.nodeType);
+        if (!schema) continue;
+        const propertyNames = Object.keys(schema.properties);
+        const remaining: string[] = [];
+
+        for (const entry of node.metadata) {
+            const key = noteKey(entry);
+            const value = entry.slice(entry.indexOf(':') + 1).trim();
+            const field = key === null ? undefined : propertyNames.find(name => name.toLowerCase() === key);
+            const prop = field === undefined ? undefined : schema.properties[field];
+
+            if (key === 'name' && value === node.name) continue;
+            if (field === undefined || prop === undefined || field === 'name') {
+                remaining.push(entry);
+            } else if (prop.relationship) {
+                const edgeType = prop.relationship.edgeType;
+                const hasEdges = graph.edges.some(e => e.from === node.name && e.edgeType === edgeType);
+                if (value !== '' && !hasEdges) remaining.push(entry);
+            } else if (node.fields?.[field] !== undefined) {
+                remaining.push(entry);
+            } else if (value !== '') {
+                const list = value.split(', ').map(item => item.trim()).filter(item => item !== '');
+                setField(node, field, prop.type === 'array' ? list : value);
+            }
+        }
+        if (remaining.length !== node.metadata.length) {
+            node.metadata = remaining;
+            changed++;
+        }
+    }
+    return changed;
 }

@@ -82,6 +82,54 @@ describe('GraphStore', () => {
         expect(readFileSync(path.join(dir, 'm.json'), 'utf-8').trimEnd().split('\n').slice(2)).toEqual(broken);
     });
 
+    it('writes fields before metadata, and tidies fields that were edited by hand', async () => {
+        writeFileSync(path.join(dir, 'm.json'), [
+            '{"type":"node","name":"A","nodeType":"t","metadata":["note"],"fields":{"age":42,"tags":["a",1],"role":"smith"}}',
+            '{"type":"node","name":"B","nodeType":"t","metadata":[],"fields":{}}',
+            '{"type":"node","name":"C","nodeType":"t","metadata":[],"fields":"oops"}',
+        ].join('\n') + '\n');
+        const store = new GraphStore(path.join(dir, 'm.json'));
+        expect((await store.read()).nodes[0].fields).toEqual({age: '42', tags: ['a', '1'], role: 'smith'});
+
+        await store.update(() => undefined);
+        expect(readFileSync(path.join(dir, 'm.json'), 'utf-8')).toBe([
+            '{"type":"node","name":"A","nodeType":"t","fields":{"age":"42","tags":["a","1"],"role":"smith"},"metadata":["note"]}',
+            '{"type":"node","name":"B","nodeType":"t","metadata":[]}',
+            '{"type":"node","name":"C","nodeType":"t","metadata":[]}',
+        ].join('\n') + '\n');
+    });
+
+    it('migrate() rewrites the file only when something changed, keeping the original as a backup', async () => {
+        const original = '{"type":"node","name":"A","nodeType":"t","metadata":["old"]}\n';
+        writeFileSync(path.join(dir, 'm.json'), original);
+        const m = path.join(dir, 'm.json');
+        const store = new GraphStore(m);
+
+        expect(await store.migrate(() => 0, '.bak')).toBe(0);
+        expect(readdirSync(dir).sort()).toEqual(['m.json']);
+        expect(readFileSync(m, 'utf-8')).toBe(original);
+
+        expect(await store.migrate(g => {
+            g.nodes[0].metadata = ['new'];
+            return 1;
+        }, '.bak')).toBe(1);
+        expect(readdirSync(dir).sort()).toEqual(['m.json', 'm.json.bak']);
+        expect(readFileSync(m + '.bak', 'utf-8')).toBe(original);
+        expect(readFileSync(m, 'utf-8')).toContain('"metadata":["new"]');
+
+        // A later conversion never overwrites the first backup.
+        await store.migrate(g => {
+            g.nodes[0].metadata = ['newer'];
+            return 1;
+        }, '.bak');
+        expect(readFileSync(m + '.bak', 'utf-8')).toBe(original);
+
+        // A missing memory file is simply left missing.
+        const none = new GraphStore(path.join(dir, 'none', 'memory.json'));
+        expect(await none.migrate(() => 0, '.bak')).toBe(0);
+        expect(readdirSync(path.join(dir, 'none'))).toEqual([]);
+    });
+
     it('writes nothing when the change throws', async () => {
         const store = new GraphStore(file);
         await store.update(g => addNodes(g, [{name: 'A', nodeType: 't', metadata: ['keep']}]));

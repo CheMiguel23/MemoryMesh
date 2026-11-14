@@ -18,13 +18,13 @@ It works for anything you can describe as things and the connections between the
 
 The memory is a graph of **nodes** and **edges**:
 
-- A **node** is a thing: `{"name": "Mara", "nodeType": "npc", "metadata": ["role: Blacksmith", "status: injured"]}`
+- A **node** is a thing: `{"name": "Mara", "nodeType": "npc", "fields": {"role": "Blacksmith", "status": "injured"}, "metadata": ["owes Bob money"]}`. Its `fields` are structured facts; `metadata` is a list of free-form notes.
 - An **edge** is a connection between two nodes: `{"from": "Mara", "to": "Riverton", "edgeType": "located_in"}`. Edges can have an optional `weight` from 0 to 1 (strength or confidence; treated as 1 when not set).
 
 A **schema** describes one type of node. For a schema named `add_npc`, MemoryMesh creates three tools:
 
-- `add_npc` creates an NPC. Fields marked as relationships also create edges to the nodes they name.
-- `update_npc` changes the fields you pass and keeps everything else. Passing an empty list (`[]`) clears a field, and passing `metadata` replaces the whole list.
+- `add_npc` creates an NPC. Its fields are stored on the node, except fields marked as relationships, which become edges to the nodes they name.
+- `update_npc` changes the fields you pass and keeps everything else. Passing an empty value (`""` or `[]`) clears a field, and passing `metadata` replaces the notes.
 - `delete_npc` removes the NPC and its edges.
 
 Every call is all-or-nothing: if anything is wrong (a missing required field, a link to a node that doesn't exist), nothing is saved, and the AI gets a clear error it can act on.
@@ -60,7 +60,7 @@ Each schema is a JSON file ending in `.schema.json`. This is the `npc` example t
 | ↳ `required` | `true` if the AI must provide this field. Keep this to a minimum, or the AI will invent values it doesn't know. |
 | ↳ `enum` | A list of allowed values. Anything else is rejected. |
 | ↳ `relationship` | Creates an edge (`edgeType`) to each node named in this field. Those nodes must already exist. Updating the field replaces every edge of that `edgeType` going out from the node, so give each relationship field its own `edgeType`. |
-| `additionalProperties` | `true` (default) saves fields not listed above as extra metadata; `false` rejects them. |
+| `additionalProperties` | `true` (default) saves fields not listed above as extra fields; `false` rejects them. |
 
 If a schema file is invalid, MemoryMesh skips it, logs the reason, and starts with the others. It also logs a warning for a schema that loads but probably won't behave as you expect, such as two relationship fields sharing an `edgeType`.
 
@@ -86,11 +86,11 @@ These are always available, whatever schemas you use:
 | Tool | Purpose |
 |---|---|
 | `read_graph` | Return the whole graph |
-| `search_nodes` | Find nodes that contain every word of the query in their name, type or metadata, with their direct neighbours |
+| `search_nodes` | Find nodes that contain every word of the query in their name, type, fields, notes or links, with their direct neighbours |
 | `open_nodes` | Return specific nodes by name, with their direct neighbours |
-| `add_nodes`, `update_nodes`, `delete_nodes` | Work with nodes of any type. `update_nodes` can also rename a node (`newName`): its edges, and metadata of linked nodes that names it, follow |
+| `add_nodes`, `update_nodes`, `delete_nodes` | Work with nodes of any type, including their `fields`. `update_nodes` can also rename a node (`newName`), and its edges follow |
 | `add_edges`, `update_edges`, `delete_edges` | Work with edges |
-| `add_metadata`, `delete_metadata` | Add or remove individual metadata entries |
+| `add_metadata`, `delete_metadata` | Add or remove individual notes |
 
 ## Installation
 
@@ -141,6 +141,8 @@ npm install
 
 Then restart your MCP client. Updating keeps your memory file and any schemas you edited.
 
+Older versions stored every field as a `"key: value"` note in `metadata`. The first time a newer version starts, it moves the notes that belong to a schema field into `fields`, and keeps the file as it was next to it as `memory.json.before-fields.bak`.
+
 If your memory file is still in `dist/data/memory.json` (the old default), MemoryMesh keeps using it but logs a warning, because deleting `dist/` would delete your memory. To fix it, quit your MCP client and move the file to `.memorymesh/memory.json` in your home folder.
 
 ## Configuration
@@ -175,7 +177,7 @@ The memory file stores one JSON object per line. The [MemoryViewer](https://gith
 
 - Tell the AI what the memory is for, for example in a Claude Project's instructions: *"Use the memorymesh tools to record every person, team and project I mention, and check the graph before answering questions about them."*
 - The AI can be hesitant to delete things. Ask explicitly when you want something removed.
-- When information conflicts, the latest update wins. To keep both versions, record the source or date in metadata (`"source: tavern gossip"`, `"as of: chapter 3"`), or store competing claims as separate nodes.
+- When information conflicts, the latest update wins. To keep both versions, record the source or date in a note (`"source: tavern gossip"`, `"as of: chapter 3"`), or store competing claims as separate nodes.
 
 ## Troubleshooting
 

@@ -505,6 +505,15 @@
         return span;
     }
 
+    /** Everything stored about a node as "key: value" lines: its fields first, then its notes. */
+    function nodeDetails(item) {
+        const fields = item.fields && typeof item.fields === 'object' && !Array.isArray(item.fields) ? item.fields : {};
+        const fieldLines = Object.entries(fields).map(([key, value]) =>
+            `${key}: ${Array.isArray(value) ? value.join(', ') : value}`
+        );
+        return [...fieldLines, ...(Array.isArray(item.metadata) ? item.metadata : [])];
+    }
+
     function parseMetadata(metadata) {
         if (!metadata || !Array.isArray(metadata)) return [];
         
@@ -789,7 +798,8 @@ const transaction = db.transaction([STORE_NAME], 'readwrite');
             
             // Metadata column
             const metadataCell = document.createElement('td');
-            if (item.metadata) {
+            const details = nodeDetails(item);
+            if (item.metadata || item.fields) {
                 const metadataHeader = document.createElement('div');
                 metadataHeader.className = 'metadata-header';
                 
@@ -799,12 +809,12 @@ const transaction = db.transaction([STORE_NAME], 'readwrite');
                 
                 const metadataCount = document.createElement('span');
                 metadataCount.className = 'metadata-summary';
-                metadataCount.textContent = `${item.metadata.length} entries`;
+                metadataCount.textContent = `${details.length} entries`;
                 
                 metadataHeader.appendChild(expandButton);
                 metadataHeader.appendChild(metadataCount);
                 
-                const metadataContent = createMetadataDisplay(item.metadata);
+                const metadataContent = createMetadataDisplay(details);
                 metadataContent.querySelector('.metadata-grid').style.display = 'none';
                 
                 expandButton.addEventListener('click', () => {

@@ -47,6 +47,22 @@ describe('nodes', () => {
         expect(node).toEqual({type: 'node', name: 'Aragorn', nodeType: 'npc', metadata: ['title: King']});
     });
 
+    it('adds and updates fields', () => {
+        const g = sample();
+        const [ring] = graph.addNodes(g, [{name: 'Ring', nodeType: 'item', fields: {owner: 'Frodo', powers: ['invisibility'], empty: ''}}]);
+        expect(ring).toEqual({type: 'node', name: 'Ring', nodeType: 'item', fields: {owner: 'Frodo', powers: ['invisibility']}, metadata: []});
+        expect(Object.keys(ring)).toEqual(['type', 'name', 'nodeType', 'fields', 'metadata']);
+
+        // Only the fields that are passed change; a blank value removes one.
+        graph.updateNodes(g, [{name: 'Ring', fields: {owner: 'Gollum', powers: []}}]);
+        expect(ring.fields).toEqual({owner: 'Gollum'});
+        graph.updateNodes(g, [{name: 'Ring', fields: {owner: ' '}}]);
+        expect(ring).toEqual({type: 'node', name: 'Ring', nodeType: 'item', metadata: []});
+
+        expect(() => graph.addNodes(g, [{name: 'X', nodeType: 't', fields: ['a']}])).toThrow('nodes[0].fields must be an object');
+        expect(() => graph.updateNodes(g, [{name: 'Ring', fields: {weight: 3}}])).toThrow('fields.weight must be a string or an array of strings');
+    });
+
     it('trims names when adding, so " Sam " cannot exist next to "Sam"', () => {
         const g = sample();
         expect(graph.addNodes(g, [{name: '  Sam ', nodeType: 'npc'}])[0].name).toBe('Sam');
@@ -188,6 +204,30 @@ describe('reading', () => {
         expect(result.nodes.map(n => n.name)).toEqual(['Aragorn', 'Rivendell']);
         expect(result.edges).toHaveLength(1);
         expect(graph.searchNodes(sample(), 'artifact').nodes.map(n => n.name)).toEqual(['Anduril']);
+    });
+
+    it('searches fields and what a node links to', () => {
+        const g: Graph = {
+            nodes: [
+                {type: 'node', name: 'Bob', nodeType: 'npc', fields: {role: 'Blacksmith', traits: ['gruff', 'kind']}, metadata: []},
+                {type: 'node', name: 'Ann', nodeType: 'npc', fields: {role: 'Baker'}, metadata: []},
+                {type: 'node', name: 'Riverton', nodeType: 'location', metadata: []},
+            ],
+            edges: [
+                {type: 'edge', from: 'Bob', to: 'Riverton', edgeType: 'located_in'},
+                {type: 'edge', from: 'Ann', to: 'Riverton', edgeType: 'located_in'},
+            ],
+        };
+        const matches = (query: string) => graph.searchNodes({...g, edges: []}, query).nodes.map(n => n.name);
+        expect(matches('blacksmith')).toEqual(['Bob']);
+        expect(matches('traits: gruff, kind')).toEqual(['Bob']);
+
+        // A word may be satisfied by a link, as long as another word is about the node itself.
+        expect(graph.searchNodes(g, 'blacksmith riverton').nodes.map(n => n.name)).toEqual(['Bob', 'Riverton']);
+        expect(graph.searchNodes(g, 'baker located_in').nodes.map(n => n.name)).toEqual(['Ann', 'Riverton']);
+        // The name of a hub matches the hub, not everything linked to it (they come along as neighbours).
+        const hub = graph.searchNodes(g, 'riverton');
+        expect(hub.nodes.map(n => n.name)).toEqual(['Riverton', 'Bob', 'Ann']);
     });
 
     it('matches nodes that contain every word of the query, in any field and order', () => {

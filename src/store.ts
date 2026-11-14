@@ -1,16 +1,31 @@
-import {promises as fs} from 'fs';
+import {constants as fsConstants, promises as fs} from 'fs';
 import path from 'path';
-import type {Edge, Graph, Node} from './types.js';
+import type {Edge, FieldValue, Graph, Node} from './types.js';
 
 const isString = (value: unknown): value is string => typeof value === 'string';
 
-/** Returns the record as a node if it is one, filling in a missing metadata list. */
+const asText = (value: unknown) => (isString(value) ? value : JSON.stringify(value));
+
+/** Returns the record as a node if it is one, tidying up fields and metadata that were edited by hand. */
 function asNode(item: any): Node | undefined {
     if (item?.type !== 'node' || !isString(item.name) || !isString(item.nodeType)) return undefined;
-    const metadata = Array.isArray(item.metadata)
-        ? item.metadata.map((entry: unknown) => (isString(entry) ? entry : JSON.stringify(entry)))
-        : [];
-    return {...item, metadata};
+    const {fields: rawFields, metadata: rawMetadata, ...rest} = item;
+
+    const fields: Record<string, FieldValue> = {};
+    if (typeof rawFields === 'object' && rawFields !== null && !Array.isArray(rawFields)) {
+        for (const [key, value] of Object.entries(rawFields)) {
+            fields[key] = Array.isArray(value) ? value.map(asText) : asText(value);
+        }
+    }
+    const metadata = Array.isArray(rawMetadata) ? rawMetadata.map(asText) : [];
+    return {...rest, ...(Object.keys(fields).length > 0 ? {fields} : {}), metadata};
+}
+
+/** One line of the memory file for a node, with its keys in a fixed, readable order. */
+function nodeLine(node: Node): string {
+    const {type: _type, name, nodeType, fields, metadata, ...rest} = node;
+    const hasFields = fields !== undefined && Object.keys(fields).length > 0;
+    return JSON.stringify({type: 'node', name, nodeType, ...(hasFields ? {fields} : {}), metadata, ...rest});
 }
 
 /** Returns the record as an edge if it is one. */
@@ -69,6 +84,27 @@ export class GraphStore {
             const result = change(graph);
             await this.save(graph, otherLines);
             return result;
+        }));
+    }
+
+    /**
+     * Converts the stored graph in place, e.g. from an older file format.
+     * Unlike update(), nothing is written unless `convert` reports that it changed
+     * something, and the file as it was is first copied to `<file><backupSuffix>`
+     * (an existing backup is never overwritten). Returns what `convert` returned.
+     */
+    migrate(convert: (graph: Graph) => number, backupSuffix: string): Promise<number> {
+        return this.enqueue(() => this.withLock(async () => {
+            const {graph, otherLines} = await this.load();
+            const changed = convert(graph);
+            if (changed > 0) {
+                await fs.copyFile(this.file, `${this.file}${backupSuffix}`, fsConstants.COPYFILE_EXCL)
+                    .catch(error => {
+                        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+                    });
+                await this.save(graph, otherLines);
+            }
+            return changed;
         }));
     }
 
@@ -158,7 +194,7 @@ export class GraphStore {
 
     private async save(graph: Graph, otherLines: string[]): Promise<void> {
         const lines = [
-            ...graph.nodes.map(node => JSON.stringify({...node, type: 'node'})),
+            ...graph.nodes.map(nodeLine),
             ...graph.edges.map(edge => JSON.stringify({...edge, type: 'edge'})),
             ...otherLines,
         ];
