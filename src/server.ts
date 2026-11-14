@@ -80,8 +80,16 @@ function staticHandlers(store: GraphStore): Record<string, Handler> {
                 : `Searched nodes with query: "${query}" - found ${plural(result.nodes.length, 'node')} (matches and their neighbours)`;
             return ok(summary, result);
         },
-        open_nodes: async ({names}) => {
-            const result = graph.openNodes(await store.read(), names);
+        find_nodes: async args => {
+            const {nodes, edges, total} = graph.findNodes(await store.read(), args);
+            let summary = total === 0 ? 'No nodes match' : `Found ${plural(total, 'node')}`;
+            if (nodes.length < total) {
+                summary += `; showing the first ${nodes.length} (raise "limit" or narrow the conditions to see the rest)`;
+            }
+            return ok(summary, {nodes, edges});
+        },
+        open_nodes: async ({names, depth}) => {
+            const result = graph.openNodes(await store.read(), names, depth ?? 1);
             const requested = names as string[];
             const found = new Set(result.nodes.map(n => n.name));
             const missing = requested.filter(name => !found.has(name));

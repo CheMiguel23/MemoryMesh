@@ -54,11 +54,11 @@ describe('tools/list', () => {
         tools = (await client.listTools()).tools;
     });
 
-    it('lists the 11 built-in tools plus add/update/delete for each of the 2 example schemas', () => {
-        expect(tools).toHaveLength(17);
+    it('lists the 12 built-in tools plus add/update/delete for each of the 2 example schemas', () => {
+        expect(tools).toHaveLength(18);
         const names = tools.map(t => t.name);
         for (const name of ['add_nodes', 'update_nodes', 'delete_nodes', 'add_edges', 'update_edges', 'delete_edges',
-            'read_graph', 'search_nodes', 'open_nodes', 'add_metadata', 'delete_metadata',
+            'read_graph', 'search_nodes', 'open_nodes', 'find_nodes', 'add_metadata', 'delete_metadata',
             'add_npc', 'update_npc', 'delete_npc', 'add_location', 'update_location', 'delete_location']) {
             expect(names).toContain(name);
         }
@@ -71,7 +71,7 @@ describe('tools/list', () => {
             expect(tool.annotations, tool.name).toBeDefined();
             expect(tool.annotations!.openWorldHint, tool.name).toBe(false);
         }
-        for (const name of ['read_graph', 'search_nodes', 'open_nodes']) {
+        for (const name of ['read_graph', 'search_nodes', 'open_nodes', 'find_nodes']) {
             expect(hints(name)!.readOnlyHint, name).toBe(true);
         }
         for (const name of ['add_nodes', 'add_edges', 'add_metadata', 'add_npc', 'add_location']) {
@@ -248,6 +248,40 @@ describe('schema tools', () => {
         const r = await call('search_nodes', {query: 'blacksmith town'});
         expect(r.text).toContain('found 2 nodes');
         expect(r.text).toContain('"name":"Bob"');
+    });
+
+    it('find_nodes answers exact questions about fields and links', async () => {
+        await seedTown();
+        await call('add_location', {location: {name: 'Forest', description: 'd'}});
+        await call('add_npc', {npc: {name: 'Bob', description: 'd', status: 'injured', currentLocation: 'Town'}});
+        await call('add_npc', {npc: {name: 'Ann', description: 'd', status: 'alive', currentLocation: 'Town'}});
+        await call('add_npc', {npc: {name: 'Cat', description: 'd', status: 'injured', currentLocation: 'Forest'}});
+
+        const injuredInTown = await call('find_nodes', {
+            nodeType: 'npc', where: {status: 'injured'}, linkedTo: 'Town', edgeType: 'located_in',
+        });
+        expect(injuredInTown.text).toBe(
+            'Found 1 node\n\n' +
+            '{"nodes":[{"type":"node","name":"Bob","nodeType":"npc","fields":{"description":"d","status":"injured"},"metadata":[]}],' +
+            '"edges":[{"type":"edge","from":"Bob","to":"Town","edgeType":"located_in"}]}'
+        );
+        expect((await call('find_nodes', {nodeType: 'npc', limit: 2})).text)
+            .toContain('Found 3 nodes; showing the first 2');
+        expect((await call('find_nodes', {where: {status: 'dead'}})).text).toContain('No nodes match');
+        expect((await call('find_nodes', {})).text).toContain('Error: Give at least one of');
+        expect((await call('find_nodes')).text).toContain('Error: Give at least one of');
+    });
+
+    it('open_nodes follows more links when asked to', async () => {
+        await seedTown();
+        await call('add_location', {location: {name: 'Mill', description: 'd', partOf: 'Town'}});
+        await call('add_npc', {npc: {name: 'Bob', description: 'd', currentLocation: 'Mill'}});
+        const names = async (depth?: number) =>
+            JSON.parse((await call('open_nodes', {names: ['Bob'], depth})).text.split('\n\n')[1]).nodes.map((n: any) => n.name);
+        expect(await names(0)).toEqual(['Bob']);
+        expect(await names()).toEqual(['Bob', 'Mill']);
+        expect(await names(2)).toEqual(['Bob', 'Town', 'Mill']);
+        expect((await call('open_nodes', {names: ['Bob'], depth: 9})).text).toBe('Error: "depth" must be a whole number from 0 to 3');
     });
 
     it('update_npc can replace the notes without touching the fields', async () => {

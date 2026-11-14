@@ -328,13 +328,33 @@ export function deleteMetadata(graph: Graph, input: unknown): number {
 // Reading
 // ---------------------------------------------------------------------------
 
-/** Returns the given nodes plus their direct neighbours and the edges connecting them. */
-function withNeighbours(graph: Graph, matches: Node[]): Graph {
-    const matched = new Set(matches.map(node => node.name));
-    const edges = graph.edges.filter(edge => matched.has(edge.from) || matched.has(edge.to));
-    const neighbourNames = new Set(edges.flatMap(edge => [edge.from, edge.to]));
-    const neighbours = graph.nodes.filter(node => !matched.has(node.name) && neighbourNames.has(node.name));
-    return {nodes: [...matches, ...neighbours], edges};
+/**
+ * Returns the given nodes plus everything within `depth` edges of them (1 = their
+ * direct neighbours), and the edges that were followed to get there.
+ */
+function withNeighbours(graph: Graph, matches: Node[], depth = 1): Graph {
+    const reached = new Set(matches.map(node => node.name));
+    const edges = new Set<Edge>();
+    let frontier = new Set(reached);
+
+    for (let step = 0; step < depth && frontier.size > 0; step++) {
+        const next = new Set<string>();
+        for (const edge of graph.edges) {
+            if (!frontier.has(edge.from) && !frontier.has(edge.to)) continue;
+            edges.add(edge);
+            for (const name of [edge.from, edge.to]) {
+                if (!reached.has(name)) {
+                    reached.add(name);
+                    next.add(name);
+                }
+            }
+        }
+        frontier = next;
+    }
+
+    const matched = new Set(matches);
+    const neighbours = graph.nodes.filter(node => !matched.has(node) && reached.has(node.name));
+    return {nodes: [...matches, ...neighbours], edges: graph.edges.filter(edge => edges.has(edge))};
 }
 
 /**
@@ -362,7 +382,107 @@ export function searchNodes(graph: Graph, query: unknown): Graph {
     return withNeighbours(graph, matches);
 }
 
-export function openNodes(graph: Graph, names: unknown): Graph {
+/** How far open_nodes may follow edges. Beyond this, a result tends to be most of the graph. */
+export const MAX_DEPTH = 3;
+
+export function openNodes(graph: Graph, names: unknown, depth: unknown = 1): Graph {
     const wanted = new Set(requireStringArray(names, 'names'));
-    return withNeighbours(graph, graph.nodes.filter(node => wanted.has(node.name)));
+    if (typeof depth !== 'number' || !Number.isInteger(depth) || depth < 0 || depth > MAX_DEPTH) {
+        throw new Error(`"depth" must be a whole number from 0 to ${MAX_DEPTH}`);
+    }
+    return withNeighbours(graph, graph.nodes.filter(node => wanted.has(node.name)), depth);
+}
+
+// ---------------------------------------------------------------------------
+// Finding nodes by what is stored about them
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_FIND_LIMIT = 50;
+
+/** Text is compared without regard to case or surrounding spaces; "7" and 7 are the same. */
+const comparable = (value: unknown) => String(value).trim().toLowerCase();
+
+/** Orders two values as numbers when both are numbers, otherwise as text (which suits YYYY-MM-DD dates). */
+function compare(a: unknown, b: unknown): number {
+    const [x, y] = [Number(a), Number(b)];
+    const numeric = String(a).trim() !== '' && String(b).trim() !== '' && Number.isFinite(x) && Number.isFinite(y);
+    if (numeric) return x - y;
+    return comparable(a) < comparable(b) ? -1 : comparable(a) > comparable(b) ? 1 : 0;
+}
+
+const isCondition = (value: unknown): value is string | number | boolean =>
+    typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+
+/**
+ * Turns one entry of "where" into a test on a field's value:
+ *   "injured"              the field equals it (or, for a list field, contains it)
+ *   ["injured", "dead"]    the field equals (or contains) any of them
+ *   {"min": 5, "max": 10}  the field lies in that range; either end may be left out
+ */
+function fieldTest(field: string, condition: unknown): (value: FieldValue | undefined) => boolean {
+    const what = `where.${field}`;
+    const matchesAny = (wanted: unknown[]) => {
+        const set = new Set(wanted.map(comparable));
+        return (value: FieldValue | undefined) =>
+            value !== undefined && [value].flat().some(item => set.has(comparable(item)));
+    };
+
+    if (isCondition(condition)) return matchesAny([condition]);
+    if (Array.isArray(condition)) {
+        if (condition.length === 0 || !condition.every(isCondition)) {
+            throw new Error(`${what} must list at least one value to match`);
+        }
+        return matchesAny(condition);
+    }
+    const range = requireObject(condition, what);
+    const unknown = Object.keys(range).filter(key => key !== 'min' && key !== 'max');
+    const {min, max} = range;
+    if (unknown.length > 0 || (min === undefined && max === undefined) ||
+        ![min, max].every(end => end === undefined || isCondition(end))) {
+        throw new Error(`${what} must be a value, a list of values, or a range such as {"min": 5, "max": 10}`);
+    }
+    return value =>
+        value !== undefined && !Array.isArray(value) &&
+        (min === undefined || compare(value, min) >= 0) &&
+        (max === undefined || compare(value, max) <= 0);
+}
+
+/**
+ * Finds nodes by type, by field values and by what they link to. Every condition
+ * that is given must hold. Returns up to `limit` matches with the edges leaving
+ * them (which is where their relationship fields live), and the total found.
+ */
+export function findNodes(graph: Graph, input: unknown): { nodes: Node[]; edges: Edge[]; total: number } {
+    const args = requireObject(input ?? {}, 'arguments');
+    const nodeType = args.nodeType === undefined ? undefined : requireString(args.nodeType, '"nodeType"');
+    const tests = Object.entries(args.where === undefined ? {} : requireObject(args.where, '"where"'))
+        .map(([field, condition]) => ({field, test: fieldTest(field, condition)}));
+
+    const edgeType = args.edgeType === undefined ? undefined : requireString(args.edgeType, '"edgeType"');
+    let linking: Set<string> | undefined;
+    if (args.linkedTo !== undefined) {
+        const target = requireNode(graph, requireString(args.linkedTo, '"linkedTo"'));
+        linking = new Set(graph.edges
+            .filter(edge => edge.to === target.name && (edgeType === undefined || edge.edgeType === edgeType))
+            .map(edge => edge.from));
+    } else if (edgeType !== undefined) {
+        throw new Error('"edgeType" says how nodes must be linked to "linkedTo", so it needs "linkedTo" as well');
+    }
+
+    const limit = args.limit ?? DEFAULT_FIND_LIMIT;
+    if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1) {
+        throw new Error('"limit" must be a whole number of at least 1');
+    }
+    if (nodeType === undefined && tests.length === 0 && linking === undefined) {
+        throw new Error('Give at least one of "nodeType", "where" or "linkedTo". To get everything, use read_graph.');
+    }
+
+    const matches = graph.nodes.filter(node =>
+        (nodeType === undefined || comparable(node.nodeType) === comparable(nodeType)) &&
+        (linking === undefined || linking.has(node.name)) &&
+        tests.every(({field, test}) => test(node.fields?.[field]))
+    );
+    const nodes = matches.slice(0, limit);
+    const shown = new Set(nodes.map(node => node.name));
+    return {nodes, edges: graph.edges.filter(edge => shown.has(edge.from)), total: matches.length};
 }

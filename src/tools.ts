@@ -236,7 +236,7 @@ export const staticTools: Tool[] = [
 
     {
         name: "open_nodes",
-        description: "Open specific nodes in the knowledge graph by their names",
+        description: "Open specific nodes in the knowledge graph by their names, together with the nodes they are linked to",
         annotations: ANNOTATIONS.read,
         inputSchema: {
             type: "object",
@@ -246,8 +246,35 @@ export const staticTools: Tool[] = [
                     items: {type: "string", description: "Node name to open"},
                     description: "An array of node names to retrieve",
                 },
+                depth: {
+                    type: "integer",
+                    description: "How many links to follow from the named nodes: 1 (default) returns their direct neighbours, 2 also the neighbours of those, 0 only the named nodes",
+                    minimum: 0,
+                    maximum: 3,
+                },
             },
             required: ["names"],
+        },
+    },
+
+    {
+        name: "find_nodes",
+        description: "Find nodes by their type, the values of their fields, and what they are linked to. Every condition given must hold. Use this for exact questions such as 'all npcs whose status is injured' or 'everyone located in Riverton'; use search_nodes for free-text search",
+        annotations: ANNOTATIONS.read,
+        inputSchema: {
+            type: "object",
+            properties: {
+                nodeType: {type: "string", description: "Only nodes of this type, e.g. npc"},
+                where: {
+                    type: "object",
+                    description: "Conditions on fields, e.g. {\"status\": \"injured\"}. A value matches a field that equals it, or a list field that contains it. A list of values matches any of them: {\"status\": [\"injured\", \"missing\"]}. A range matches numbers and dates: {\"age\": {\"min\": 18}}, {\"born\": {\"min\": \"2020-01-01\", \"max\": \"2020-12-31\"}}",
+                    properties: {},
+                    additionalProperties: {description: "A value, a list of values, or a range with min and/or max"},
+                },
+                linkedTo: {type: "string", description: "Only nodes that have an edge pointing to this node, e.g. Riverton"},
+                edgeType: {type: "string", description: "Used with linkedTo: only count edges of this type, e.g. located_in"},
+                limit: {type: "integer", description: "The most nodes to return (default 50)", minimum: 1},
+            },
         },
     },
 

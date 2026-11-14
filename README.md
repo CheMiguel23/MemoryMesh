@@ -87,7 +87,8 @@ These are always available, whatever schemas you use:
 |---|---|
 | `read_graph` | Return the whole graph |
 | `search_nodes` | Find nodes that contain every word of the query in their name, type, fields, notes or links, with their direct neighbours |
-| `open_nodes` | Return specific nodes by name, with their direct neighbours |
+| `find_nodes` | Find nodes by type, field values and links: `{"nodeType": "npc", "where": {"status": "injured"}, "linkedTo": "Riverton"}`. A condition can be a value, a list of values, or a range (`{"age": {"min": 18}}`) |
+| `open_nodes` | Return specific nodes by name, with what they are linked to. `depth` (0 to 3, default 1) sets how many links to follow |
 | `add_nodes`, `update_nodes`, `delete_nodes` | Work with nodes of any type, including their `fields`. `update_nodes` can also rename a node (`newName`), and its edges follow |
 | `add_edges`, `update_edges`, `delete_edges` | Work with edges |
 | `add_metadata`, `delete_metadata` | Add or remove individual notes |

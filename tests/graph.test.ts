@@ -243,6 +243,90 @@ describe('reading', () => {
         expect(names('human location')).toEqual([]);
     });
 
+    describe('findNodes', () => {
+        const people = (): Graph => ({
+            nodes: [
+                {type: 'node', name: 'Ann', nodeType: 'person', fields: {age: 34, role: 'Baker', skills: ['bread', 'Cakes'], born: '1990-05-01', active: true}, metadata: []},
+                {type: 'node', name: 'Ben', nodeType: 'person', fields: {age: 9, role: 'pupil', born: '2015-11-20', active: false}, metadata: []},
+                {type: 'node', name: 'Cid', nodeType: 'person', fields: {age: '70', role: 'baker'}, metadata: []},
+                {type: 'node', name: 'Rex', nodeType: 'pet', fields: {age: 9}, metadata: []},
+                {type: 'node', name: 'Town', nodeType: 'place', metadata: []},
+            ],
+            edges: [
+                {type: 'edge', from: 'Ann', to: 'Town', edgeType: 'lives_in'},
+                {type: 'edge', from: 'Ben', to: 'Town', edgeType: 'visits'},
+                {type: 'edge', from: 'Rex', to: 'Ann', edgeType: 'owned_by'},
+            ],
+        });
+        const names = (query: unknown) => graph.findNodes(people(), query).nodes.map(n => n.name);
+
+        it('filters by type and by field values, ignoring case', () => {
+            expect(names({nodeType: 'Person'})).toEqual(['Ann', 'Ben', 'Cid']);
+            expect(names({where: {role: 'BAKER'}})).toEqual(['Ann', 'Cid']);
+            expect(names({where: {age: 9}})).toEqual(['Ben', 'Rex']);
+            expect(names({where: {age: '9'}, nodeType: 'pet'})).toEqual(['Rex']);
+            expect(names({where: {active: true}})).toEqual(['Ann']);
+            expect(names({where: {active: 'false'}})).toEqual(['Ben']);
+            expect(names({where: {role: 'baker', age: 34}})).toEqual(['Ann']);
+            expect(names({where: {shoeSize: 42}})).toEqual([]);
+        });
+
+        it('matches a list field that contains the value, and any of several values', () => {
+            expect(names({where: {skills: 'cakes'}})).toEqual(['Ann']);
+            expect(names({where: {role: ['pupil', 'baker']}})).toEqual(['Ann', 'Ben', 'Cid']);
+        });
+
+        it('matches ranges of numbers and dates', () => {
+            expect(names({where: {age: {min: 10}}})).toEqual(['Ann', 'Cid']);
+            expect(names({where: {age: {min: 9, max: 34}}})).toEqual(['Ann', 'Ben', 'Rex']);
+            expect(names({where: {born: {max: '1999-12-31'}}})).toEqual(['Ann']);
+            expect(names({where: {born: {min: '2000-01-01'}}})).toEqual(['Ben']);
+        });
+
+        it('filters by what a node links to', () => {
+            expect(names({linkedTo: 'Town'})).toEqual(['Ann', 'Ben']);
+            expect(names({linkedTo: 'Town', edgeType: 'lives_in'})).toEqual(['Ann']);
+            expect(names({linkedTo: 'Town', nodeType: 'pet'})).toEqual([]);
+        });
+
+        it('returns the edges leaving the matches, and counts what the limit cut off', () => {
+            const result = graph.findNodes(people(), {nodeType: 'person', limit: 2});
+            expect(result.nodes.map(n => n.name)).toEqual(['Ann', 'Ben']);
+            expect(result.total).toBe(3);
+            expect(result.edges.map(e => `${e.from}>${e.to}`)).toEqual(['Ann>Town', 'Ben>Town']);
+        });
+
+        it('explains unusable arguments', () => {
+            expect(() => names({})).toThrow('Give at least one of');
+            expect(() => names({linkedTo: 'Nowhere'})).toThrow('Node not found: "Nowhere"');
+            expect(() => names({edgeType: 'lives_in'})).toThrow('needs "linkedTo"');
+            expect(() => names({nodeType: 'person', limit: 0})).toThrow('"limit" must be');
+            expect(() => names({where: {age: {over: 5}}})).toThrow('where.age must be a value, a list of values, or a range');
+            expect(() => names({where: {age: []}})).toThrow('where.age must list at least one value');
+            expect(() => names({where: 'age > 5'})).toThrow('"where" must be an object');
+        });
+    });
+
+    it('follows edges as far as "depth" says', () => {
+        const chain: Graph = {
+            nodes: ['A', 'B', 'C', 'D', 'E'].map(name => ({type: 'node', name, nodeType: 't', metadata: []})),
+            edges: [
+                {type: 'edge', from: 'A', to: 'B', edgeType: 'next'},
+                {type: 'edge', from: 'C', to: 'B', edgeType: 'next'},
+                {type: 'edge', from: 'C', to: 'D', edgeType: 'next'},
+                {type: 'edge', from: 'D', to: 'E', edgeType: 'next'},
+            ],
+        };
+        const open = (depth: number) => graph.openNodes(chain, ['A'], depth);
+        expect(open(0)).toEqual({nodes: [chain.nodes[0]], edges: []});
+        expect(open(1).nodes.map(n => n.name)).toEqual(['A', 'B']);
+        expect(open(2).nodes.map(n => n.name)).toEqual(['A', 'B', 'C']);
+        expect(open(2).edges).toHaveLength(2);
+        expect(open(3).nodes.map(n => n.name)).toEqual(['A', 'B', 'C', 'D']);
+        expect(() => open(4)).toThrow('"depth" must be a whole number from 0 to 3');
+        expect(() => graph.openNodes(chain, ['A'], 1.5)).toThrow('"depth"');
+    });
+
     it('opens nodes with neighbours', () => {
         const result = graph.openNodes(sample(), ['Rivendell']);
         expect(result.nodes.map(n => n.name)).toEqual(['Rivendell', 'Aragorn']);
