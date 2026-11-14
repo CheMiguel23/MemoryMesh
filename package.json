@@ -1,6 +1,6 @@
 {
   "name": "memorymesh",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "An MCP server that uses a knowledge graph to store and recall structured memory for AI models",
   "license": "MIT",
   "author": "CheMiguel23",

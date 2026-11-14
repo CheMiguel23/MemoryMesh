@@ -1,6 +1,6 @@
 ## Changelog
 
-### Unreleased
+### v0.5.0 (2026-11-14)
 
 - **The memory file now defaults to `.memorymesh/memory.json` in your home folder** instead of `dist/data/memory.json`, where deleting or cleaning the build folder deleted it. An existing `dist/data/memory.json` keeps being used, with a warning in the log explaining how to move it. `MEMORYMESH_MEMORY_FILE` works as before.
 - **Lines in the memory file that are neither a node nor an edge are no longer erased.** They used to be dropped the next time anything was saved, which wiped a file written by another tool (such as the original Knowledge Graph Memory Server). They are still not part of the graph, but are now kept as they are, and reported in the log.
