@@ -7,16 +7,21 @@ import type {Graph} from './types.js';
  *
  * Every read/update loads the file fresh, and calls are queued so that two
  * tool calls arriving at the same time cannot overwrite each other's changes.
+ *
+ * Lines that are valid JSON but neither a node nor an edge (for example records
+ * written by another tool) are not part of the graph, but are kept as they are
+ * whenever the file is rewritten.
  */
 export class GraphStore {
     private queue: Promise<unknown> = Promise.resolve();
+    private warnedAboutOtherLines = false;
 
     constructor(readonly file: string) {
     }
 
     /** Returns the current graph. */
     read(): Promise<Graph> {
-        return this.enqueue(() => this.load());
+        return this.enqueue(async () => (await this.load()).graph);
     }
 
     /**
@@ -25,9 +30,9 @@ export class GraphStore {
      */
     update<T>(change: (graph: Graph) => T): Promise<T> {
         return this.enqueue(async () => {
-            const graph = await this.load();
+            const {graph, otherLines} = await this.load();
             const result = change(graph);
-            await this.save(graph);
+            await this.save(graph, otherLines);
             return result;
         });
     }
@@ -38,18 +43,19 @@ export class GraphStore {
         return run;
     }
 
-    private async load(): Promise<Graph> {
+    private async load(): Promise<{ graph: Graph; otherLines: string[] }> {
         let text: string;
         try {
             text = await fs.readFile(this.file, 'utf-8');
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-                return {nodes: [], edges: []};
+                return {graph: {nodes: [], edges: []}, otherLines: []};
             }
             throw error;
         }
 
         const graph: Graph = {nodes: [], edges: []};
+        const otherLines: string[] = [];
         text.split('\n').forEach((line, index) => {
             if (line.trim() === '') return;
             let item;
@@ -64,14 +70,24 @@ export class GraphStore {
             }
             if (item?.type === 'node') graph.nodes.push(item);
             else if (item?.type === 'edge') graph.edges.push(item);
+            else otherLines.push(line.trim());
         });
-        return graph;
+
+        if (otherLines.length > 0 && !this.warnedAboutOtherLines) {
+            this.warnedAboutOtherLines = true;
+            console.error(
+                `[memorymesh] ${this.file} has ${otherLines.length} line(s) that are neither a node nor an edge. ` +
+                `They are not part of the graph, and are kept unchanged.`
+            );
+        }
+        return {graph, otherLines};
     }
 
-    private async save(graph: Graph): Promise<void> {
+    private async save(graph: Graph, otherLines: string[]): Promise<void> {
         const lines = [
             ...graph.nodes.map(node => JSON.stringify({...node, type: 'node'})),
             ...graph.edges.map(edge => JSON.stringify({...edge, type: 'edge'})),
+            ...otherLines,
         ];
         const text = lines.length > 0 ? lines.join('\n') + '\n' : '';
 

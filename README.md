@@ -141,11 +141,13 @@ npm install
 
 Then restart your MCP client. Updating keeps your memory file and any schemas you edited.
 
+If your memory file is still in `dist/data/memory.json` (the old default), MemoryMesh keeps using it but logs a warning, because deleting `dist/` would delete your memory. To fix it, quit your MCP client and move the file to `.memorymesh/memory.json` in your home folder.
+
 ## Configuration
 
 | Environment variable | What it sets | Default |
 |---|---|---|
-| `MEMORYMESH_MEMORY_FILE` | Path of the memory file | `dist/data/memory.json` |
+| `MEMORYMESH_MEMORY_FILE` | Path of the memory file | `.memorymesh/memory.json` in your home folder |
 | `MEMORYMESH_SCHEMAS_DIR` | Folder containing `.schema.json` files | `dist/data/schemas` |
 
 Set them in your Claude Desktop config:
@@ -167,7 +169,7 @@ Keeping your schemas and memory in a folder of your own keeps them separate from
 
 ## Viewing your memory
 
-The memory file stores one JSON object per line. The [MemoryViewer](https://github.com/CheMiguel23/MemoryMesh/blob/main/MemoryViewer.html) displays it as a searchable table with stats ([guide](https://github.com/CheMiguel23/MemoryMesh/discussions/15)): open it in Chrome or Edge, click **Select Memory File**, and pick your `memory.json`.
+The memory file stores one JSON object per line. The [MemoryViewer](https://github.com/CheMiguel23/MemoryMesh/blob/main/MemoryViewer.html) displays it as a searchable table with stats ([guide](https://github.com/CheMiguel23/MemoryMesh/discussions/15)): open it in Chrome or Edge, click **Select Memory File**, and pick your `memory.json`. Its path is in the first lines of the [log](#troubleshooting). The default `.memorymesh` folder is hidden on macOS and Linux: press `Cmd+Shift+.` in the macOS file dialog to show it.
 
 ## Tips
 

@@ -140,6 +140,12 @@ describe('static tools', () => {
     it('rejects unknown tools with a protocol error', async () => {
         await expect(client.callTool({name: 'no_such_tool', arguments: {}})).rejects.toThrow('Unknown tool');
     });
+
+    it('does not mistake built-in object properties for tools', async () => {
+        for (const name of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) {
+            await expect(client.callTool({name, arguments: {}})).rejects.toThrow('Unknown tool');
+        }
+    });
 });
 
 describe('schema tools', () => {

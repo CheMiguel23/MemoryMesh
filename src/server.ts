@@ -136,7 +136,8 @@ export function createServer(store: GraphStore, schemas: EntitySchema[]): Server
 
     server.setRequestHandler(CallToolRequestSchema, async request => {
         const {name, arguments: args = {}} = request.params;
-        const handler = handlers[name];
+        // Own properties only: "constructor", "toString" etc. are not tools.
+        const handler = Object.hasOwn(handlers, name) ? handlers[name] : undefined;
         if (!handler) {
             throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${name}`);
         }

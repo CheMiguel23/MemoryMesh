@@ -15,6 +15,13 @@ async function main(): Promise<void> {
     // Logs go to stderr: stdout is reserved for the MCP protocol.
     console.error(`[memorymesh] v${CONFIG.version} running on stdio`);
     console.error(`[memorymesh] memory file: ${CONFIG.memoryFile}`);
+    if (CONFIG.memoryFileInBuildOutput) {
+        console.error(
+            '[memorymesh] WARNING: this memory file is inside the build folder (dist/), so deleting or cleaning ' +
+            `dist/ deletes your memory. Stop MemoryMesh and move the file to ${CONFIG.defaultMemoryFile} ` +
+            '(the default location), or anywhere else with MEMORYMESH_MEMORY_FILE set to the new path.'
+        );
+    }
     console.error(`[memorymesh] schemas: ${schemas.map(s => s.entity).join(', ') || '(none)'} from ${CONFIG.schemasDir}`);
 }
 
