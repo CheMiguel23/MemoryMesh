@@ -4,7 +4,7 @@ import path from 'path';
 import {fileURLToPath} from 'url';
 import {describe, expect, it, vi} from 'vitest';
 import {
-    addEntity, convertNotesToFields, deleteEntity, loadSchemas, parseSchema, schemaTools, schemaWarnings, updateEntity,
+    addEntity, convertNotesToFields, loadSchemas, parseSchema, schemaTools, schemaWarnings, updateEntity,
 } from '../src/schemas.js';
 import type {Graph} from '../src/types.js';
 
@@ -110,13 +110,13 @@ describe('loadSchemas', () => {
 });
 
 describe('schemaTools', () => {
-    const [add, update, del] = schemaTools(npc);
+    const [add, update] = schemaTools(npc);
     const fields = (tool: typeof add, key: string) => (tool.inputSchema.properties[key] as any);
 
-    it('generates add/update/delete tools', () => {
-        expect([add.name, update.name, del.name]).toEqual(['add_npc', 'update_npc', 'delete_npc']);
+    it('generates an add and an update tool (deleting is done with delete_nodes)', () => {
+        expect(schemaTools(npc).map(tool => tool.name)).toEqual(['add_npc', 'update_npc']);
         expect(add.description).toBe('Add an NPC');
-        expect(del.description).toBe('Delete an existing npc from the knowledge graph');
+        expect(update.description).toContain('Update an existing npc');
     });
 
     it('describes fields, enums and relationships', () => {
@@ -420,20 +420,6 @@ describe('updateEntity', () => {
     it('only updates nodes of its own type', () => {
         expect(() => updateEntity(withBob(), npc, {name: 'Town'})).toThrow('npc "Town" not found ("Town" is a location)');
         expect(() => updateEntity(withBob(), npc, {name: 'Nobody'})).toThrow('npc "Nobody" not found');
-    });
-});
-
-describe('deleteEntity', () => {
-    it('deletes the node and its edges', () => {
-        const g = world();
-        addEntity(g, npc, {name: 'Bob', race: 'Human', currentLocation: 'Town'});
-        expect(deleteEntity(g, npc, {name: 'Bob'})).toBe('Bob');
-        expect(g.nodes.map(n => n.name)).toEqual(['Town', 'Forest']);
-        expect(g.edges).toEqual([]);
-    });
-
-    it('only deletes nodes of its own type', () => {
-        expect(() => deleteEntity(world(), npc, {name: 'Town'})).toThrow('npc "Town" not found');
     });
 });
 

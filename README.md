@@ -21,11 +21,12 @@ The memory is a graph of **nodes** and **edges**:
 - A **node** is a thing: `{"name": "Mara", "nodeType": "npc", "fields": {"role": "Blacksmith", "status": "injured"}, "metadata": ["owes Bob money"]}`. Its `fields` are structured facts; `metadata` is a list of free-form notes.
 - An **edge** is a connection between two nodes: `{"from": "Mara", "to": "Riverton", "edgeType": "located_in"}`. Edges can have an optional `weight` from 0 to 1 (strength or confidence; treated as 1 when not set).
 
-A **schema** describes one type of node. For a schema named `add_npc`, MemoryMesh creates three tools:
+A **schema** describes one type of node. For a schema named `add_npc`, MemoryMesh creates two tools:
 
 - `add_npc` creates an NPC. Its fields are stored on the node, except fields marked as relationships, which become edges to the nodes they name.
 - `update_npc` changes the fields you pass and keeps everything else. Passing an empty value (`""` or `[]`) clears a field, and passing `metadata` replaces the notes.
-- `delete_npc` removes the NPC and its edges.
+
+Nodes of every type are removed with the built-in `delete_nodes` tool, which also removes their edges.
 
 Every call is all-or-nothing: if anything is wrong (a missing required field, a link to a node that doesn't exist), nothing is saved, and the AI gets a clear error it can act on.
 
@@ -54,7 +55,7 @@ Each schema is a JSON file ending in `.schema.json`. This is the `npc` example t
 
 | Key | Meaning |
 |---|---|
-| `name` | Must start with `add_`. The rest becomes the node type and tool suffix (`npc` → `add_npc`, `update_npc`, `delete_npc`). |
+| `name` | Must start with `add_`. The rest becomes the node type and tool suffix (`npc` → `add_npc`, `update_npc`). |
 | `description` | Description of the `add_` tool, shown to the AI. |
 | `properties` | The fields. Each has a `type` and a `description`, plus optionally the keys below. The types are `string`, `array` (a list of texts), `number`, `boolean` and `date` (written as `2024-03-09`). |
 | ↳ `required` | `true` if the AI must provide this field. Keep this to a minimum, or the AI will invent values it doesn't know. |
@@ -203,7 +204,7 @@ npm run watch   # recompiles on change
 | `src/index.ts` | Entry point: loads schemas and starts the server on stdio |
 | `src/server.ts` | Lists tools and routes each tool call to its handler |
 | `src/tools.ts` | Definitions of the built-in tools |
-| `src/schemas.ts` | Loads schema files and implements the generated `add_`/`update_`/`delete_` tools |
+| `src/schemas.ts` | Loads schema files and implements the generated `add_`/`update_` tools |
 | `src/graph.ts` | The graph operations themselves, with input validation |
 | `src/store.ts` | Reads and writes the memory file, one change at a time |
 | `src/watch.ts` | Notices changes in the schemas folder |

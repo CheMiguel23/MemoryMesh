@@ -11,7 +11,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import {CONFIG} from './config.js';
 import * as graph from './graph.js';
-import {addEntity, deleteEntity, schemaTools, updateEntity, type EntitySchema} from './schemas.js';
+import {addEntity, schemaTools, updateEntity, type EntitySchema} from './schemas.js';
 import type {GraphStore} from './store.js';
 import {staticTools} from './tools.js';
 
@@ -126,17 +126,13 @@ function schemaHandlers(store: GraphStore, schema: EntitySchema): Record<string,
                 edgeChanges: {remove: removedEdges, add: addedEdges},
             });
         },
-        [`delete_${entity}`]: async args => {
-            const name = await store.update(g => deleteEntity(g, schema, args[`delete_${entity}`]));
-            return ok(`Deleted ${entity}: ${name} (and its edges)`);
-        },
     };
 }
 
 export interface MemoryMeshServer {
     server: Server;
     /**
-     * Replaces the schemas, and with them the add_/update_/delete_ tools. When that
+     * Replaces the schemas, and with them the add_/update_ tools. When that
      * changes the tool list, connected clients are told to fetch it again.
      * Returns whether the tool list changed.
      */

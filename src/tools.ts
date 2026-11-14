@@ -166,7 +166,7 @@ export const staticTools: Tool[] = [
 
     {
         name: "delete_nodes",
-        description: "Delete multiple nodes and their associated edges from the knowledge graph",
+        description: "Delete nodes of any type, and the edges connected to them, from the knowledge graph",
         annotations: ANNOTATIONS.change,
         inputSchema: {
             type: "object",

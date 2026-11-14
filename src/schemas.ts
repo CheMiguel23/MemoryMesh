@@ -2,8 +2,9 @@
  * Schema-driven tools.
  *
  * Each `<entity>.schema.json` file describes a node type (npc, location, ...).
- * For every schema MemoryMesh exposes three tools:
- *   add_<entity>, update_<entity>, delete_<entity>
+ * For every schema MemoryMesh exposes two tools:
+ *   add_<entity> and update_<entity>
+ * Nodes of every type are deleted with the built-in delete_nodes tool.
  *
  * Schema file format:
  * {
@@ -28,7 +29,7 @@
 
 import {promises as fs} from 'fs';
 import path from 'path';
-import {addEdges, deleteNodes, findNode, isBlank, requireArray, setField} from './graph.js';
+import {addEdges, findNode, isBlank, requireArray, setField} from './graph.js';
 import {ANNOTATIONS} from './tools.js';
 import type {Tool} from '@modelcontextprotocol/sdk/types.js';
 import type {Edge, FieldValue, Graph, Node} from './types.js';
@@ -294,25 +295,6 @@ export function schemaTools(schema: EntitySchema): Tool[] {
                 required: [`update_${entity}`],
             },
         },
-        {
-            name: `delete_${entity}`,
-            description: `Delete an existing ${entity} from the knowledge graph`,
-            annotations: ANNOTATIONS.change,
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    [`delete_${entity}`]: {
-                        type: 'object',
-                        description: `Delete parameters for ${entity}`,
-                        properties: {
-                            name: {type: 'string', description: `The name of the ${entity} to delete`},
-                        },
-                        required: ['name'],
-                    },
-                },
-                required: [`delete_${entity}`],
-            },
-        },
     ];
 }
 
@@ -543,16 +525,6 @@ export function updateEntity(
     }
 
     return {node, removedEdges, addedEdges};
-}
-
-export function deleteEntity(graph: Graph, schema: EntitySchema, input: unknown): string {
-    const args = requireEntityArgs(input, `delete_${schema.entity}`, schema.entity);
-    const node = findNode(graph, args.name);
-    if (!node || node.nodeType !== schema.entity) {
-        throw new Error(`${schema.entity} "${args.name}" not found`);
-    }
-    deleteNodes(graph, [node.name]);
-    return node.name;
 }
 
 // ---------------------------------------------------------------------------

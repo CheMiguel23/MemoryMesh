@@ -56,14 +56,16 @@ describe('tools/list', () => {
         tools = (await client.listTools()).tools;
     });
 
-    it('lists the 12 built-in tools plus add/update/delete for each of the 2 example schemas', () => {
-        expect(tools).toHaveLength(18);
+    it('lists the 12 built-in tools plus add and update for each of the 2 example schemas', () => {
+        expect(tools).toHaveLength(16);
         const names = tools.map(t => t.name);
         for (const name of ['add_nodes', 'update_nodes', 'delete_nodes', 'add_edges', 'update_edges', 'delete_edges',
             'read_graph', 'search_nodes', 'open_nodes', 'find_nodes', 'add_metadata', 'delete_metadata',
-            'add_npc', 'update_npc', 'delete_npc', 'add_location', 'update_location', 'delete_location']) {
+            'add_npc', 'update_npc', 'add_location', 'update_location']) {
             expect(names).toContain(name);
         }
+        // Nodes of every type are deleted with delete_nodes; there is no delete tool per schema.
+        expect(names.filter(name => name.startsWith('delete_'))).toEqual(['delete_nodes', 'delete_edges', 'delete_metadata']);
         expect(new Set(names).size).toBe(names.length);
     });
 
@@ -80,7 +82,7 @@ describe('tools/list', () => {
             expect(hints(name), name).toMatchObject({readOnlyHint: false, destructiveHint: false});
         }
         for (const name of ['update_nodes', 'update_edges', 'delete_nodes', 'delete_edges', 'delete_metadata',
-            'update_npc', 'delete_npc', 'update_location', 'delete_location']) {
+            'update_npc', 'update_location']) {
             expect(hints(name), name).toMatchObject({readOnlyHint: false, destructiveHint: true});
         }
     });
@@ -242,7 +244,7 @@ describe('schema tools', () => {
         expect(memory()).toBe('');
     });
 
-    it('add, update and delete an npc with relationship edges', async () => {
+    it('add and update an npc with relationship edges, then delete it', async () => {
         await seedTown();
         await call('add_location', {location: {name: 'Forest', type: 'Wild', description: 'd'}});
 
@@ -265,8 +267,9 @@ describe('schema tools', () => {
         expect(memory()).toContain('"from":"Bob","to":"Forest"');
         expect(memory()).not.toContain('"from":"Bob","to":"Town"');
 
-        expect((await call('delete_npc', {delete_npc: {name: 'Bob'}})).text).toBe('Deleted npc: Bob (and its edges)');
+        expect((await call('delete_nodes', {nodeNames: ['Bob']})).text).toBe('Deleted 1 node and their edges: "Bob"');
         expect(memory()).not.toContain('Bob');
+        await expect(client.callTool({name: 'delete_npc', arguments: {delete_npc: {name: 'Bob'}}})).rejects.toThrow('Unknown tool');
     });
 
     it('rejects a value outside a field\'s enum, and saves nothing', async () => {
@@ -338,6 +341,5 @@ describe('schema tools', () => {
         expect((await call('add_npc', {})).text).toContain('Missing argument "npc"');
         expect((await call('add_npc', {npc: {name: 'Bob'}})).text)
             .toContain('Missing required field(s) for npc: description');
-        expect((await call('delete_npc', {delete_npc: {name: 'Nobody'}})).text).toBe('Error: npc "Nobody" not found');
     });
 });

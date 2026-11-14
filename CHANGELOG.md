@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- **Breaking: `delete_<entity>` tools are gone.** Use the built-in `delete_nodes`, which deletes nodes of any type with their edges. A schema now produces two tools (`add_` and `update_`) instead of three, so eleven schemas mean 22 tools instead of 33. Instructions that mention a tool such as `delete_npc` need updating.
 - **Fields are stored as fields.** A node now has `fields`, e.g. `{"status": "injured", "traits": ["brave", "kind"]}`, next to `metadata`, which is a list of free-form notes. The schema tools used to flatten every field into a `"key: value"` note, which lost its type and had to be guessed back apart.
   - A relationship field is stored only as edges. The node no longer keeps a second copy of the names it links to, so nothing goes stale when a node is renamed.
   - The node's name is no longer repeated as a `name: ...` note.
