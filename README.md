@@ -1,5 +1,5 @@
 # MemoryMesh
-[![Release](https://img.shields.io/badge/Release-v0.4.0-blue.svg)](./CHANGELOG.md)
+[![Release](https://img.shields.io/badge/Release-v0.5.0-blue.svg)](./CHANGELOG.md)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC.svg?logo=typescript&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![GitHub Stars](https://img.shields.io/github/stars/CheMiguel23/MemoryMesh.svg?style=social)
@@ -24,7 +24,7 @@ The memory is a graph of **nodes** and **edges**:
 A **schema** describes one type of node. For a schema named `add_npc`, MemoryMesh creates three tools:
 
 - `add_npc` creates an NPC. Fields marked as relationships also create edges to the nodes they name.
-- `update_npc` changes the fields you pass and keeps everything else. Passing `metadata` replaces the whole list.
+- `update_npc` changes the fields you pass and keeps everything else. Passing an empty list (`[]`) clears a field, and passing `metadata` replaces the whole list.
 - `delete_npc` removes the NPC and its edges.
 
 Every call is all-or-nothing: if anything is wrong (a missing required field, a link to a node that doesn't exist), nothing is saved, and the AI gets a clear error it can act on.
@@ -58,11 +58,11 @@ Each schema is a JSON file ending in `.schema.json`. This is the `npc` example t
 | `description` | Description of the `add_` tool, shown to the AI. |
 | `properties` | The fields. Each has a `type` (`string` or `array`) and a `description`, plus optionally: |
 | ↳ `required` | `true` if the AI must provide this field. Keep this to a minimum, or the AI will invent values it doesn't know. |
-| ↳ `enum` | A list of allowed values. |
-| ↳ `relationship` | Creates an edge (`edgeType`) to each node named in this field. Those nodes must already exist. |
+| ↳ `enum` | A list of allowed values. Anything else is rejected. |
+| ↳ `relationship` | Creates an edge (`edgeType`) to each node named in this field. Those nodes must already exist. Updating the field replaces every edge of that `edgeType` going out from the node, so give each relationship field its own `edgeType`. |
 | `additionalProperties` | `true` (default) saves fields not listed above as extra metadata; `false` rejects them. |
 
-If a schema file is invalid, MemoryMesh skips it, logs the reason, and starts with the others.
+If a schema file is invalid, MemoryMesh skips it, logs the reason, and starts with the others. It also logs a warning for a schema that loads but probably won't behave as you expect, such as two relationship fields sharing an `edgeType`.
 
 The [SchemaManager](https://github.com/CheMiguel23/MemoryMesh/blob/main/SchemaManager.html) lets you create and edit schemas visually ([guide](https://github.com/CheMiguel23/MemoryMesh/discussions/3)).
 
@@ -86,7 +86,7 @@ These are always available, whatever schemas you use:
 | Tool | Purpose |
 |---|---|
 | `read_graph` | Return the whole graph |
-| `search_nodes` | Find nodes by name, type or metadata, with their direct neighbours |
+| `search_nodes` | Find nodes that contain every word of the query in their name, type or metadata, with their direct neighbours |
 | `open_nodes` | Return specific nodes by name, with their direct neighbours |
 | `add_nodes`, `update_nodes`, `delete_nodes` | Work with nodes of any type |
 | `add_edges`, `update_edges`, `delete_edges` | Work with edges |

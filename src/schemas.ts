@@ -53,13 +53,23 @@ export interface EntitySchema {
 /** Tool names that schema-generated tools must not take over. */
 const RESERVED_ENTITIES = new Set(['nodes', 'edges', 'metadata']);
 
+/** Longest tool name AI clients reliably accept. The longest generated name is "update_<entity>". */
+const MAX_TOOL_NAME_LENGTH = 64;
+const MAX_ENTITY_LENGTH = MAX_TOOL_NAME_LENGTH - 'update_'.length;
+
+const PROPERTY_TYPES = ['string', 'array'];
+
+const isPlainObject = (value: unknown): value is Record<string, any> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
+
 // ---------------------------------------------------------------------------
 // Loading
 // ---------------------------------------------------------------------------
 
 /** Validates a parsed schema file and converts it to an EntitySchema. */
 export function parseSchema(raw: any): EntitySchema {
-    if (typeof raw !== 'object' || raw === null) {
+    if (!isPlainObject(raw)) {
         throw new Error('schema must be a JSON object');
     }
     if (typeof raw.name !== 'string' || !/^add_[A-Za-z0-9_-]+$/.test(raw.name)) {
@@ -69,18 +79,32 @@ export function parseSchema(raw: any): EntitySchema {
     if (RESERVED_ENTITIES.has(entity)) {
         throw new Error(`"${raw.name}" clashes with a built-in tool; choose another name`);
     }
-    if (typeof raw.description !== 'string' || raw.description === '') {
+    if (entity.length > MAX_ENTITY_LENGTH) {
+        throw new Error(`"name" is too long: use at most ${MAX_ENTITY_LENGTH} characters after "add_"`);
+    }
+    if (!isNonEmptyString(raw.description)) {
         throw new Error('"description" is required');
     }
-    if (typeof raw.properties !== 'object' || raw.properties === null) {
+    if (!isPlainObject(raw.properties)) {
         throw new Error('"properties" must be an object');
     }
+    // Anything wrong here would end up in the tool definitions sent to the client,
+    // where one malformed tool can make the client reject all of them.
     for (const [prop, config] of Object.entries<any>(raw.properties)) {
-        if (!config?.type || !config?.description) {
+        if (!isPlainObject(config) || !isNonEmptyString(config.type) || !isNonEmptyString(config.description)) {
             throw new Error(`property "${prop}" must have a type and a description`);
         }
-        if (config.relationship && !config.relationship.edgeType) {
-            throw new Error(`property "${prop}" has a relationship without an edgeType`);
+        if (config.enum !== undefined &&
+            (!Array.isArray(config.enum) || config.enum.length === 0 || !config.enum.every(isNonEmptyString))) {
+            throw new Error(`property "${prop}": "enum" must be a list of at least one text value`);
+        }
+        if (config.relationship !== undefined && config.relationship !== null && config.relationship !== false) {
+            if (!isPlainObject(config.relationship) || !isNonEmptyString(config.relationship.edgeType)) {
+                throw new Error(`property "${prop}" has a relationship without an edgeType`);
+            }
+            if (config.relationship.description !== undefined && typeof config.relationship.description !== 'string') {
+                throw new Error(`property "${prop}": the relationship "description" must be text`);
+            }
         }
     }
     return {
@@ -89,6 +113,37 @@ export function parseSchema(raw: any): EntitySchema {
         properties: raw.properties,
         additionalProperties: raw.additionalProperties,
     };
+}
+
+/**
+ * Things in a valid schema that probably do not do what its author expects.
+ * They are logged when the schema is loaded; the schema still works.
+ */
+export function schemaWarnings(schema: EntitySchema): string[] {
+    const warnings: string[] = [];
+    const fieldsByEdgeType = new Map<string, string[]>();
+
+    for (const [name, prop] of Object.entries(schema.properties)) {
+        if (!PROPERTY_TYPES.includes(prop.type)) {
+            warnings.push(`property "${name}" has type "${prop.type}", which is treated as "string" (use "string" or "array")`);
+        }
+        if (name === 'metadata') {
+            warnings.push(`property "metadata" clashes with the "metadata" argument of update_${schema.entity}, which replaces all metadata; rename it`);
+        }
+        if (prop.relationship) {
+            const fields = fieldsByEdgeType.get(prop.relationship.edgeType) ?? [];
+            fieldsByEdgeType.set(prop.relationship.edgeType, [...fields, name]);
+        }
+    }
+    for (const [edgeType, fields] of fieldsByEdgeType) {
+        if (fields.length > 1) {
+            warnings.push(
+                `properties ${fields.map(f => `"${f}"`).join(' and ')} share the edgeType "${edgeType}", ` +
+                `so updating one removes the edges of the other; give each its own edgeType`
+            );
+        }
+    }
+    return warnings;
 }
 
 /**
@@ -113,6 +168,9 @@ export async function loadSchemas(dir: string): Promise<EntitySchema[]> {
                 throw new Error(`another schema already defines "add_${schema.entity}"`);
             }
             schemas.push(schema);
+            for (const warning of schemaWarnings(schema)) {
+                console.error(`[memorymesh] Schema ${file}: ${warning}`);
+            }
         } catch (error) {
             console.error(`[memorymesh] Skipping schema ${file}: ${(error as Error).message}`);
         }
@@ -280,17 +338,38 @@ function relationshipEdges(graph: Graph, from: string, field: string, edgeType: 
 }
 
 const isSet = (value: unknown) => value !== undefined && value !== null;
+const isEmptyList = (value: unknown) => Array.isArray(value) && value.length === 0;
+
+/** True when a field was given a value worth storing (an empty list is not). */
+const hasValue = (value: unknown) => isSet(value) && !isEmptyList(value);
+
+/** Tool arguments are not validated by the client or the SDK, so enums are enforced here. */
+function rejectInvalidEnumValues(schema: EntitySchema, args: Record<string, unknown>): void {
+    for (const [field, prop] of Object.entries(schema.properties)) {
+        // Relationship fields hold node names, so their enum is not advertised or enforced.
+        if (!prop.enum || prop.relationship || !isSet(args[field])) continue;
+        const value = args[field];
+        const invalid = (Array.isArray(value) ? value : [value]).filter(item => !prop.enum!.includes(item as string));
+        if (invalid.length > 0) {
+            throw new Error(
+                `Invalid value for "${field}": ${invalid.map(item => JSON.stringify(item)).join(', ')}. ` +
+                `Allowed values: ${prop.enum.join(', ')}`
+            );
+        }
+    }
+}
 
 export function addEntity(graph: Graph, schema: EntitySchema, input: unknown): { node: Node; edges: Edge[] } {
     const {entity, properties} = schema;
     const args = requireEntityArgs(input, entity, entity);
     rejectUnknownFields(schema, args);
+    rejectInvalidEnumValues(schema, args);
 
     const existing = findNode(graph, args.name);
     if (existing) {
         throw new Error(`Node already exists: "${args.name}" (${existing.nodeType}). Update it instead of adding it again.`);
     }
-    const missing = Object.keys(properties).filter(field => properties[field].required && !isSet(args[field]));
+    const missing = Object.keys(properties).filter(field => properties[field].required && !hasValue(args[field]));
     if (missing.length > 0) {
         throw new Error(`Missing required field(s) for ${entity}: ${missing.join(', ')}`);
     }
@@ -301,7 +380,7 @@ export function addEntity(graph: Graph, schema: EntitySchema, input: unknown): {
     const edges: Edge[] = [];
     for (const field of fields) {
         const value = args[field];
-        if (!isSet(value)) continue;
+        if (!hasValue(value)) continue;
         metadata.push(`${field}: ${formatValue(value)}`);
         const relationship = properties[field]?.relationship;
         if (relationship) {
@@ -323,6 +402,7 @@ export function updateEntity(
     const {entity, properties} = schema;
     const args = requireEntityArgs(input, `update_${entity}`, entity);
     rejectUnknownFields(schema, args, ['metadata']);
+    rejectInvalidEnumValues(schema, args);
 
     const node = findNode(graph, args.name);
     if (!node || node.nodeType !== entity) {
@@ -337,10 +417,14 @@ export function updateEntity(
 
     for (const [field, value] of Object.entries(args)) {
         if (field === 'name' || field === 'metadata' || !isSet(value)) continue;
-        metadata = setMetadata(metadata, field, formatValue(value));
+        // An empty list clears the field instead of leaving an empty "field: " entry behind.
+        metadata = isEmptyList(value)
+            ? metadata.filter(entry => metadataKey(entry) !== field.toLowerCase())
+            : setMetadata(metadata, field, formatValue(value));
 
         const relationship = properties[field]?.relationship;
         if (relationship) {
+            // The field owns every edge of its type leaving this node, so all of them are replaced.
             const newEdges = relationshipEdges(graph, node.name, field, relationship.edgeType, value);
             const old = graph.edges.filter(e => e.from === node.name && e.edgeType === relationship.edgeType);
             graph.edges = graph.edges.filter(e => !old.includes(e));

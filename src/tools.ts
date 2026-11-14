@@ -180,13 +180,13 @@ export const staticTools: Tool[] = [
 
     {
         name: "search_nodes",
-        description: "Search for nodes in the knowledge graph based on a query",
+        description: "Search for nodes in the knowledge graph. Returns the nodes that contain every word of the query in their name, type or metadata, plus their direct neighbours",
         inputSchema: {
             type: "object",
             properties: {
                 query: {
                     type: "string",
-                    description: "The search query to match against node names, types, and metadata content"
+                    description: "One or more words to match (case-insensitive) against node names, types, and metadata content"
                 },
             },
             required: ["query"],

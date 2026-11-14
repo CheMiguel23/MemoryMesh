@@ -184,6 +184,23 @@ describe('schema tools', () => {
         expect(memory()).not.toContain('Bob');
     });
 
+    it('rejects a value outside a field\'s enum, and saves nothing', async () => {
+        const r = await call('add_npc', {npc: {name: 'Bob', description: 'A man', status: 'sleepy'}});
+        expect(r).toEqual({
+            isError: true,
+            text: 'Error: Invalid value for "status": "sleepy". Allowed values: alive, injured, dead, missing',
+        });
+        expect(memory()).toBe('');
+    });
+
+    it('search_nodes finds a node by several words at once', async () => {
+        await seedTown();
+        await call('add_npc', {npc: {name: 'Bob', description: 'A grumpy blacksmith', currentLocation: ['Town']}});
+        const r = await call('search_nodes', {query: 'blacksmith town'});
+        expect(r.text).toContain('found 2 nodes');
+        expect(r.text).toContain('"name": "Bob"');
+    });
+
     it('update_npc can replace all metadata', async () => {
         await seedTown();
         await call('add_npc', {npc: {name: 'Bob', description: 'd', currentLocation: 'Town'}});

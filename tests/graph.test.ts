@@ -150,6 +150,14 @@ describe('reading', () => {
         expect(graph.searchNodes(sample(), 'artifact').nodes.map(n => n.name)).toEqual(['Anduril']);
     });
 
+    it('matches nodes that contain every word of the query, in any field and order', () => {
+        const names = (query: string) => graph.searchNodes({...sample(), edges: []}, query).nodes.map(n => n.name);
+        expect(names('human npc')).toEqual(['Aragorn']);
+        expect(names('  NPC   aragorn ')).toEqual(['Aragorn']);
+        expect(names('race: human')).toEqual(['Aragorn']);
+        expect(names('human location')).toEqual([]);
+    });
+
     it('opens nodes with neighbours', () => {
         const result = graph.openNodes(sample(), ['Rivendell']);
         expect(result.nodes.map(n => n.name)).toEqual(['Rivendell', 'Aragorn']);

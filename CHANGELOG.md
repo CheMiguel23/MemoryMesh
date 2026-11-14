@@ -1,10 +1,16 @@
 ## Changelog
 
-### Unreleased
+### v0.5.0 (2026-11-14)
 
 - **The memory file now defaults to `.memorymesh/memory.json` in your home folder** instead of `dist/data/memory.json`, where deleting or cleaning the build folder deleted it. An existing `dist/data/memory.json` keeps being used, with a warning in the log explaining how to move it. `MEMORYMESH_MEMORY_FILE` works as before.
 - **Lines in the memory file that are neither a node nor an edge are no longer erased.** They used to be dropped the next time anything was saved, which wiped a file written by another tool (such as the original Knowledge Graph Memory Server). They are still not part of the graph, but are now kept as they are, and reported in the log.
 - **Names like `constructor` or `toString` are no longer accepted as tool names.** They now return the same "Unknown tool" error as any other unknown name.
+- **`search_nodes` understands several words.** A node matches when every word of the query appears in its name, type or metadata, in any order. A query like `blacksmith riverton` used to find nothing unless that exact phrase was stored.
+- **`enum` values are enforced.** `add_<entity>` and `update_<entity>` reject a value that is not in the field's `enum` and list the allowed ones, instead of saving it.
+- **An empty list clears a field.** `update_<entity>` with `"traits": []` removes the entry (and, for a relationship field, its edges) instead of leaving an empty `traits: ` behind. `add_<entity>` no longer stores empty lists, and an empty list does not count as a value for a required field.
+- **Schema files are checked more thoroughly.** A schema whose `properties` is not an object, whose `enum` is not a list of text values, or whose name is longer than 57 characters after `add_` is now skipped with a reason, because it would produce tool definitions a client can reject as a whole. A warning is logged for a property type other than `string` or `array` (treated as `string`), a property called `metadata`, and relationship fields that share an `edgeType`.
+- **A hand-edited memory file no longer breaks searching.** A node without a `metadata` list is read as having none. Nodes without a name or type, and edges without `from`, `to` or `edgeType`, are left out of the graph and kept in the file unchanged.
+- **Tests run automatically** on every pull request and push to `main` (GitHub Actions, Node 22 and 24).
 - **Bundled examples reduced to two small schemas** (`npc` and `location`), rewritten to be self-contained and to require only the fields that matter. The full [RPG set](https://github.com/CheMiguel23/MemoryMesh/discussions/70) and new sets ([People & organization](https://github.com/CheMiguel23/MemoryMesh/discussions/67), [Personal CRM](https://github.com/CheMiguel23/MemoryMesh/discussions/68), [Research & reading notes](https://github.com/CheMiguel23/MemoryMesh/discussions/69)) are shared in Discussions. Existing installs keep any schemas already in `dist/data/schemas`.
 - **README rewritten** to be shorter and up to date.
 

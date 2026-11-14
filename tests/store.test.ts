@@ -2,7 +2,7 @@ import {mkdtempSync, readFileSync, readdirSync, writeFileSync} from 'fs';
 import {tmpdir} from 'os';
 import path from 'path';
 import {beforeEach, describe, expect, it} from 'vitest';
-import {addNodes, updateNodes} from '../src/graph.js';
+import {addNodes, searchNodes, updateNodes} from '../src/graph.js';
 import {GraphStore} from '../src/store.js';
 
 let dir: string;
@@ -56,6 +56,30 @@ describe('GraphStore', () => {
         expect(lines).toHaveLength(6);
         expect(lines.slice(3)).toEqual(other);
         expect((await store.read()).nodes.map(n => n.name)).toEqual(['A', 'B', 'C']);
+    });
+
+    it('fills in a missing metadata list and sets aside nodes and edges it cannot use', async () => {
+        const broken = [
+            '{"type":"node","nodeType":"t","metadata":["a node without a name"]}',
+            '{"type":"edge","from":"A","edgeType":"knows"}',
+        ];
+        writeFileSync(path.join(dir, 'm.json'), [
+            '{"type":"node","name":"A","nodeType":"t"}',
+            '{"type":"node","name":"B","nodeType":"t","metadata":"not a list"}',
+            ...broken,
+        ].join('\n') + '\n');
+        const store = new GraphStore(path.join(dir, 'm.json'));
+
+        const g = await store.read();
+        expect(g.nodes).toEqual([
+            {type: 'node', name: 'A', nodeType: 't', metadata: []},
+            {type: 'node', name: 'B', nodeType: 't', metadata: []},
+        ]);
+        expect(g.edges).toEqual([]);
+        expect(searchNodes(g, 'anything').nodes).toEqual([]);
+
+        await store.update(() => undefined);
+        expect(readFileSync(path.join(dir, 'm.json'), 'utf-8').trimEnd().split('\n').slice(2)).toEqual(broken);
     });
 
     it('writes nothing when the change throws', async () => {
