@@ -1,6 +1,6 @@
 ## Changelog
 
-### Unreleased
+### v0.6.0 (2026-11-14)
 
 - **Nodes can be renamed.** `update_nodes` accepts `newName`. The node's edges follow, and so does metadata that refers to it by name: its own `name: ...` entry, and entries such as `currentLocation: Town` on nodes linked to it.
 - **Two MCP clients can safely share one memory file.** Each change now takes a short-lived lock file (`memory.json.lock`) next to the memory file. Without it, two MemoryMesh processes writing at the same time could each overwrite the other's change. A lock left behind by a crashed process is ignored after 10 seconds.
