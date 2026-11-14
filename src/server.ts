@@ -18,9 +18,12 @@ import {staticTools} from './tools.js';
 type Args = Record<string, unknown>;
 type Handler = (args: Args) => Promise<CallToolResult>;
 
-/** A successful result: a one-line summary, followed by the data as JSON. */
+/**
+ * A successful result: a one-line summary, followed by the data as JSON.
+ * The JSON is not indented: the reader is an AI, and indentation only costs it context space.
+ */
 export function ok(summary: string, data?: unknown): CallToolResult {
-    const text = data === undefined ? summary : `${summary}\n\n${JSON.stringify(data, null, 2)}`;
+    const text = data === undefined ? summary : `${summary}\n\n${JSON.stringify(data)}`;
     return {content: [{type: 'text', text}]};
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "memorymesh",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "An MCP server that uses a knowledge graph to store and recall structured memory for AI models",
   "license": "MIT",
   "author": "CheMiguel23",
@@ -15,7 +15,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc && node scripts/copy-schemas.mjs",

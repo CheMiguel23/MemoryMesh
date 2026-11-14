@@ -1,4 +1,4 @@
-import {mkdtempSync, readFileSync, readdirSync, writeFileSync} from 'fs';
+import {mkdirSync, mkdtempSync, readFileSync, readdirSync, utimesSync, writeFileSync} from 'fs';
 import {tmpdir} from 'os';
 import path from 'path';
 import {beforeEach, describe, expect, it} from 'vitest';
@@ -102,6 +102,45 @@ describe('GraphStore', () => {
             store.update(g => addNodes(g, [{name: `N${i}`, nodeType: 't'}]))
         ));
         expect((await store.read()).nodes).toHaveLength(25);
+    });
+
+    it('does not lose updates when two servers share one memory file', async () => {
+        // Two stores have separate queues, just like two MemoryMesh processes.
+        const stores = [new GraphStore(file), new GraphStore(file)];
+        await Promise.all(Array.from({length: 40}, (_, i) =>
+            stores[i % 2].update(g => addNodes(g, [{name: `N${i}`, nodeType: 't'}]))
+        ));
+        expect((await stores[0].read()).nodes).toHaveLength(40);
+        expect(readdirSync(path.dirname(file))).toEqual(['memory.json']);
+    });
+
+    it('waits for a lock held by another process, then reports clearly if it never frees up', async () => {
+        mkdirSync(path.dirname(file), {recursive: true});
+        writeFileSync(`${file}.lock`, '');
+        const store = new GraphStore(file, {lockWaitMs: 150});
+        await expect(store.update(g => addNodes(g, [{name: 'A', nodeType: 't'}])))
+            .rejects.toThrow('in use by another MemoryMesh process');
+        expect(await store.read()).toEqual({nodes: [], edges: []});
+    });
+
+    it('ignores a lock left behind by a process that died', async () => {
+        mkdirSync(path.dirname(file), {recursive: true});
+        writeFileSync(`${file}.lock`, '');
+        const longAgo = new Date(Date.now() - 60_000);
+        utimesSync(`${file}.lock`, longAgo, longAgo);
+
+        const store = new GraphStore(file);
+        await store.update(g => addNodes(g, [{name: 'A', nodeType: 't'}]));
+        expect((await store.read()).nodes).toHaveLength(1);
+        expect(readdirSync(path.dirname(file))).toEqual(['memory.json']);
+    });
+
+    it('releases the lock when the change throws', async () => {
+        const store = new GraphStore(file);
+        await expect(store.update(() => {
+            throw new Error('boom');
+        })).rejects.toThrow('boom');
+        expect(readdirSync(path.dirname(file))).toEqual([]);
     });
 
     it('keeps working after a failed call', async () => {

@@ -1,5 +1,5 @@
 # MemoryMesh
-[![Release](https://img.shields.io/badge/Release-v0.5.0-blue.svg)](./CHANGELOG.md)
+[![Release](https://img.shields.io/badge/Release-v0.6.0-blue.svg)](./CHANGELOG.md)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC.svg?logo=typescript&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![GitHub Stars](https://img.shields.io/github/stars/CheMiguel23/MemoryMesh.svg?style=social)
@@ -88,13 +88,13 @@ These are always available, whatever schemas you use:
 | `read_graph` | Return the whole graph |
 | `search_nodes` | Find nodes that contain every word of the query in their name, type or metadata, with their direct neighbours |
 | `open_nodes` | Return specific nodes by name, with their direct neighbours |
-| `add_nodes`, `update_nodes`, `delete_nodes` | Work with nodes of any type |
+| `add_nodes`, `update_nodes`, `delete_nodes` | Work with nodes of any type. `update_nodes` can also rename a node (`newName`): its edges, and metadata of linked nodes that names it, follow |
 | `add_edges`, `update_edges`, `delete_edges` | Work with edges |
 | `add_metadata`, `delete_metadata` | Add or remove individual metadata entries |
 
 ## Installation
 
-You need [Node.js](https://nodejs.org/) 18 or newer and an MCP client such as [Claude Desktop](https://claude.ai/download).
+You need [Node.js](https://nodejs.org/) 22 or newer and an MCP client such as [Claude Desktop](https://claude.ai/download).
 
 1. Download and build MemoryMesh:
 
@@ -163,7 +163,7 @@ Set them in your Claude Desktop config:
 }
 ```
 
-Keeping your schemas and memory in a folder of your own keeps them separate from the MemoryMesh code. You can also run several MemoryMesh entries with different folders, for example one per campaign or project.
+Keeping your schemas and memory in a folder of your own keeps them separate from the MemoryMesh code. You can also run several MemoryMesh entries with different folders, for example one per campaign or project. Several MCP clients can also share one memory file: each change locks the file briefly, so they don't overwrite each other.
 
 **Docker:** `docker build -t memorymesh .` then `docker run -i --rm -v memorymesh-data:/data memorymesh`. The memory file is `/data/memory.json` inside the container.
 

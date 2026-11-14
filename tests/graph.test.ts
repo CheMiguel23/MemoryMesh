@@ -47,6 +47,46 @@ describe('nodes', () => {
         expect(node).toEqual({type: 'node', name: 'Aragorn', nodeType: 'npc', metadata: ['title: King']});
     });
 
+    it('trims names when adding, so " Sam " cannot exist next to "Sam"', () => {
+        const g = sample();
+        expect(graph.addNodes(g, [{name: '  Sam ', nodeType: 'npc'}])[0].name).toBe('Sam');
+        expect(() => graph.addNodes(g, [{name: 'Sam  ', nodeType: 'npc'}])).toThrow('already exists');
+    });
+
+    it('renames a node, its edges and the metadata that refers to it', () => {
+        const g: Graph = {
+            nodes: [
+                {type: 'node', name: 'Town', nodeType: 'location', metadata: ['name: Town', 'a note about Town']},
+                {type: 'node', name: 'Bob', nodeType: 'npc', metadata: ['currentLocation: Town', 'visited: Fort, Town', 'likes Town']},
+                {type: 'node', name: 'Eve', nodeType: 'npc', metadata: ['hometown: Town']},
+            ],
+            edges: [
+                {type: 'edge', from: 'Bob', to: 'Town', edgeType: 'located_in'},
+                {type: 'edge', from: 'Town', to: 'Bob', edgeType: 'governed_by', weight: 0.5},
+            ],
+        };
+        const [town] = graph.updateNodes(g, [{name: 'Town', newName: ' Riverton '}]);
+
+        expect(town.name).toBe('Riverton');
+        expect(town.metadata).toEqual(['name: Riverton', 'a note about Town']);
+        expect(g.edges).toEqual([
+            {type: 'edge', from: 'Bob', to: 'Riverton', edgeType: 'located_in'},
+            {type: 'edge', from: 'Riverton', to: 'Bob', edgeType: 'governed_by', weight: 0.5},
+        ]);
+        // Bob links to the town, so entries naming it follow the rename; free text is left alone.
+        expect(g.nodes[1].metadata).toEqual(['currentLocation: Riverton', 'visited: Fort, Riverton', 'likes Town']);
+        // Eve has no edge to the town, so her metadata is not touched.
+        expect(g.nodes[2].metadata).toEqual(['hometown: Town']);
+        expect(graph.findNode(g, 'Town')).toBeUndefined();
+    });
+
+    it('refuses to rename onto an existing node, and accepts the current name', () => {
+        const g = sample();
+        expect(() => graph.updateNodes(g, [{name: 'Aragorn', newName: 'Rivendell'}])).toThrow('already exists');
+        expect(() => graph.updateNodes(g, [{name: 'Aragorn', newName: ' '}])).toThrow('non-empty string');
+        expect(graph.updateNodes(g, [{name: 'Aragorn', newName: 'Aragorn'}])[0].name).toBe('Aragorn');
+    });
+
     it('fails to update a missing node', () => {
         expect(() => graph.updateNodes(sample(), [{name: 'Nobody'}])).toThrow('Node not found');
     });

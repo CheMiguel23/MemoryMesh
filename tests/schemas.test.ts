@@ -176,6 +176,15 @@ describe('addEntity', () => {
         // The node was appended before edge validation; GraphStore discards the whole change.
     });
 
+    it('trims the name', () => {
+        const g = world();
+        const {node, edges} = addEntity(g, npc, {name: ' Bob ', race: 'Human', currentLocation: 'Town'});
+        expect(node.name).toBe('Bob');
+        expect(node.metadata[0]).toBe('name: Bob');
+        expect(edges[0].from).toBe('Bob');
+        expect(() => addEntity(g, npc, {name: 'Bob  ', race: 'Human', currentLocation: 'Town'})).toThrow('already exists');
+    });
+
     it('rejects existing names and malformed arguments', () => {
         const g = world();
         expect(() => addEntity(g, npc, {name: 'Town', race: 'Elf', currentLocation: 'Forest'})).toThrow('already exists');

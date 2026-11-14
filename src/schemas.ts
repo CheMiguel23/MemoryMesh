@@ -28,6 +28,7 @@
 import {promises as fs} from 'fs';
 import path from 'path';
 import {addEdges, deleteNodes, findNode, requireArray} from './graph.js';
+import {ANNOTATIONS} from './tools.js';
 import type {Tool} from '@modelcontextprotocol/sdk/types.js';
 import type {Edge, Graph, Node} from './types.js';
 
@@ -218,6 +219,7 @@ export function schemaTools(schema: EntitySchema): Tool[] {
         {
             name: `add_${entity}`,
             description: schema.description,
+            annotations: ANNOTATIONS.add,
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -234,6 +236,7 @@ export function schemaTools(schema: EntitySchema): Tool[] {
         {
             name: `update_${entity}`,
             description: `Update an existing ${entity} in the knowledge graph`,
+            annotations: ANNOTATIONS.change,
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -257,6 +260,7 @@ export function schemaTools(schema: EntitySchema): Tool[] {
         {
             name: `delete_${entity}`,
             description: `Delete an existing ${entity} from the knowledge graph`,
+            annotations: ANNOTATIONS.change,
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -362,6 +366,7 @@ function rejectInvalidEnumValues(schema: EntitySchema, args: Record<string, unkn
 export function addEntity(graph: Graph, schema: EntitySchema, input: unknown): { node: Node; edges: Edge[] } {
     const {entity, properties} = schema;
     const args = requireEntityArgs(input, entity, entity);
+    args.name = args.name.trim();
     rejectUnknownFields(schema, args);
     rejectInvalidEnumValues(schema, args);
 
