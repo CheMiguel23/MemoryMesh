@@ -1,5 +1,5 @@
-/** The value of a structured field: a text, or a list of texts. */
-export type FieldValue = string | string[];
+/** The value of a structured field: a text, a number, true/false, or a list of texts. */
+export type FieldValue = string | number | boolean | string[];
 
 /** A node (entity) in the knowledge graph. */
 export interface Node {

@@ -663,6 +663,11 @@
                         edgeType: edgeType.trim(),
                         description: propDesc
                     };
+                    // One node type is written as text, several as a list; none means "any type".
+                    const targets = (prop.querySelector('.target-type')?.value ?? '')
+                        .split(',').map(v => v.trim()).filter(v => v);
+                    if (targets.length === 1) property.relationship.target = targets[0];
+                    if (targets.length > 1) property.relationship.target = targets;
                 }
                 properties[propName] = property;
             });
@@ -754,6 +759,13 @@
                     (!Array.isArray(prop.enum) || prop.enum.length === 0 || !prop.enum.every(isText))) {
                     return `Property "${name}" is marked as an enum, so it needs at least one allowed value`;
                 }
+                if (prop.enum !== undefined && ['number', 'boolean', 'date'].includes(prop.type)) {
+                    return `Property "${name}": an enum only works with the types String and Array`;
+                }
+                const target = prop.relationship ? prop.relationship.target : undefined;
+                if (target !== undefined && ([target].flat().length === 0 || ![target].flat().every(isText))) {
+                    return `Property "${name}": the relationship target must be a node type or a list of node types`;
+                }
                 if (prop.relationship !== undefined && prop.relationship !== null && prop.relationship !== false &&
                     (!isObject(prop.relationship) || !isText(prop.relationship.edgeType))) {
                     return `Property "${name}" is marked as a relationship, so it needs an edge type`;
@@ -815,8 +827,9 @@
         },
         toggleRelationshipFields: (checkbox) => {
             const property = checkbox.closest('.property');
-            const relationshipInput = property.querySelector('.edge-type');
-            relationshipInput.style.display = checkbox.checked ? 'block' : 'none';
+            for (const input of property.querySelectorAll('.edge-type, .target-type')) {
+                input.style.display = checkbox.checked ? 'block' : 'none';
+            }
         },
         createPropertyElement: () => {
             const propertyTemplate = `
@@ -840,6 +853,9 @@
                             <select class="property-type" onchange="ui.handlePropertyTypeChange(this)">
                                 <option value="string">String</option>
                                 <option value="array">Array</option>
+                                <option value="number">Number</option>
+                                <option value="boolean">True / false</option>
+                                <option value="date">Date</option>
                             </select>
                         </div>
                         <div class="checkbox-group">
@@ -865,6 +881,7 @@
                                 Is Relationship
                             </label>
                             <input type="text" class="edge-type conditional-input" placeholder="e.g., owns, belongs_to" style="display: none;">
+                            <input type="text" class="target-type conditional-input" placeholder="Optional: node type(s) it may point at, e.g. location" style="display: none;">
                         </div>
                     </div>
                 </div>
@@ -1000,6 +1017,11 @@
                 relationshipCheckbox.checked = true;
                 edgeTypeInput.value = propDetails.relationship.edgeType;
                 edgeTypeInput.style.display = 'block';
+                const targetInput = propertyElement.querySelector('.target-type');
+                if (targetInput) {
+                    targetInput.value = [propDetails.relationship.target ?? []].flat().join(', ');
+                    targetInput.style.display = 'block';
+                }
             }
 
             return propertyElement;

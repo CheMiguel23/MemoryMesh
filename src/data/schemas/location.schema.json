@@ -25,7 +25,8 @@
       "description": "The larger location this one is inside of",
       "relationship": {
         "edgeType": "part_of",
-        "description": "The larger location this one is inside of (must already exist)"
+        "description": "The larger location this one is inside of (must already exist)",
+        "target": "location"
       }
     }
   },

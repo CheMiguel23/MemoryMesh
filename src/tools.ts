@@ -18,17 +18,15 @@ export const ANNOTATIONS = {
     change: {readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false},
 } satisfies Record<string, ToolAnnotations>;
 
-/** The `fields` argument: an object whose values are a text or a list of texts. */
+/**
+ * The `fields` argument. The value type is described in words rather than with
+ * "anyOf", which not every client accepts in a tool definition; the server checks it.
+ */
 const FIELDS = (description: string) => ({
     type: "object",
     description,
     properties: {},
-    additionalProperties: {
-        anyOf: [
-            {type: "string"},
-            {type: "array", items: {type: "string"}},
-        ],
-    },
+    additionalProperties: {description: "A text, a number, true/false, or a list of texts"},
 });
 
 export const staticTools: Tool[] = [

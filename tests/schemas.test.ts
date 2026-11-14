@@ -75,14 +75,14 @@ describe('schemaWarnings', () => {
             name: 'add_x',
             description: 'd',
             properties: {
-                age: {type: 'number', description: 'Age'},
+                age: {type: 'integer', description: 'Age'},
                 metadata: {type: 'array', description: 'Notes'},
                 home: {type: 'string', description: 'Home', relationship: {edgeType: 'located_in'}},
                 work: {type: 'string', description: 'Work', relationship: {edgeType: 'located_in'}},
             },
         }));
         expect(warnings).toHaveLength(3);
-        expect(warnings[0]).toContain('type "number"');
+        expect(warnings[0]).toContain('type "integer"');
         expect(warnings[1]).toContain('"metadata" clashes');
         expect(warnings[2]).toContain('"home" and "work" share the edgeType "located_in"');
     });
@@ -171,12 +171,12 @@ describe('addEntity', () => {
         const {node} = addEntity(world(), npc, {
             name: 'Bob', race: 'Human', currentLocation: 'Town',
             traits: 'brave',            // one value for a list field
-            age: 42, retired: false,    // extra fields that are not text
+            age: 42, retired: false,    // extra fields keep the type they arrive in
             aliases: ['Bobby', 7],      // an extra list
             home: {city: 'Town'},       // an extra object
         });
         expect(node.fields).toEqual({
-            race: 'Human', traits: ['brave'], age: '42', retired: 'false', aliases: ['Bobby', '7'], home: '{"city":"Town"}',
+            race: 'Human', traits: ['brave'], age: 42, retired: false, aliases: ['Bobby', '7'], home: '{"city":"Town"}',
         });
         expect(() => addEntity(world(), npc, {name: 'Al', race: ['Human'], currentLocation: 'Town'}))
             .toThrow('"race" must be a single text value');
@@ -228,6 +228,101 @@ describe('addEntity', () => {
         const strict = parseSchema({name: 'add_x', description: 'd', properties: {}, additionalProperties: false});
         expect(() => addEntity(world(), strict, {name: 'A', bogus: 1})).toThrow('Unknown field(s) for x: bogus');
         expect(addEntity(world(), strict, {name: 'A', metadata: ['a note']}).node.metadata).toEqual(['a note']);
+    });
+});
+
+describe('typed fields', () => {
+    const pet = parseSchema({
+        name: 'add_pet',
+        description: 'Add a pet',
+        properties: {
+            age: {type: 'number', description: 'Age in years'},
+            vaccinated: {type: 'boolean', description: 'Has had its shots'},
+            born: {type: 'date', description: 'Date of birth'},
+            species: {type: 'string', description: 'Species'},
+        },
+    });
+    const add = (fields: Record<string, unknown>) => addEntity(world(), pet, {name: 'Rex', ...fields}).node.fields;
+
+    it('stores numbers, booleans and dates as such', () => {
+        expect(add({age: 7, vaccinated: true, born: '2019-03-09', species: 'dog'}))
+            .toEqual({age: 7, vaccinated: true, born: '2019-03-09', species: 'dog'});
+        expect(add({age: 0, vaccinated: false})).toEqual({age: 0, vaccinated: false});
+    });
+
+    it('accepts the same values written as text', () => {
+        expect(add({age: ' 7.5 ', vaccinated: 'TRUE', born: '2019-03-09T14:30:00Z', species: 3}))
+            .toEqual({age: 7.5, vaccinated: true, born: '2019-03-09T14:30:00Z', species: '3'});
+    });
+
+    it('rejects values of the wrong type with a message the AI can act on', () => {
+        expect(() => add({age: 'old'})).toThrow('"age" must be a number');
+        expect(() => add({age: true})).toThrow('"age" must be a number');
+        expect(() => add({vaccinated: 'yes'})).toThrow('"vaccinated" must be true or false');
+        expect(() => add({born: 'last spring'})).toThrow('"born" must be a date written as YYYY-MM-DD');
+        expect(() => add({born: '2019-02-31'})).toThrow('"born" must be a date written as YYYY-MM-DD');
+        expect(() => add({born: 20190309})).toThrow('"born" must be a date');
+    });
+
+    it('updates and clears them like any other field', () => {
+        const g = world();
+        addEntity(g, pet, {name: 'Rex', age: 7, vaccinated: false});
+        expect(updateEntity(g, pet, {name: 'Rex', age: 8, vaccinated: true}).node.fields).toEqual({age: 8, vaccinated: true});
+        expect(updateEntity(g, pet, {name: 'Rex', age: ''}).node.fields).toEqual({vaccinated: true});
+    });
+
+    it('describes them to the client with the matching JSON type', () => {
+        const props = (schemaTools(pet)[0].inputSchema.properties as any).pet.properties;
+        expect(props.age).toEqual({type: 'number', description: 'Age in years'});
+        expect(props.vaccinated).toEqual({type: 'boolean', description: 'Has had its shots'});
+        expect(props.born).toEqual({type: 'string', description: 'Date of birth (a date written as YYYY-MM-DD)'});
+    });
+
+    it('only allows "enum" on text and list fields', () => {
+        expect(() => parseSchema({
+            name: 'add_x', description: 'd', properties: {n: {type: 'number', description: 'n', enum: ['1']}},
+        })).toThrow('"enum" only works with the types "string" and "array"');
+    });
+});
+
+describe('relationship targets', () => {
+    const person = parseSchema({
+        name: 'add_person',
+        description: 'Add a person',
+        properties: {
+            home: {type: 'string', description: 'Home', relationship: {edgeType: 'lives_in', target: 'location'}},
+            knows: {type: 'array', description: 'Knows', relationship: {edgeType: 'knows', target: ['person', 'npc']}},
+            likes: {type: 'array', description: 'Likes', relationship: {edgeType: 'likes'}},
+        },
+    });
+
+    it('accepts targets of an allowed type and rejects the rest', () => {
+        const g = world();
+        addEntity(g, person, {name: 'Ann', home: 'Town'});
+        expect(addEntity(g, person, {name: 'Ben', home: 'Forest', knows: ['Ann'], likes: ['Town', 'Ann']}).edges)
+            .toHaveLength(4);
+        expect(() => addEntity(g, person, {name: 'Cat', home: 'Ann'}))
+            .toThrow('Cannot link "Cat" to "Ann" via "home": "Ann" is a person, but "home" must name a location.');
+        expect(() => updateEntity(g, person, {name: 'Ben', knows: ['Town']}))
+            .toThrow('"Town" is a location, but "knows" must name a person or npc.');
+    });
+
+    it('tells the client what a relationship field may name', () => {
+        const props = (schemaTools(person)[0].inputSchema.properties as any).person.properties;
+        expect(props.home.items.description).toBe('The name of an existing location');
+        expect(props.knows.items.description).toBe('The name of an existing person or npc');
+        expect(props.likes.items.description).toBe('The name of an existing node');
+    });
+
+    it('requires "target" to be a node type or a list of them', () => {
+        const withTarget = (target: unknown) => parseSchema({
+            name: 'add_x', description: 'd',
+            properties: {a: {type: 'string', description: 'd', relationship: {edgeType: 'e', target}}},
+        });
+        expect(() => withTarget('')).toThrow('"target" must be a node type or a list of node types');
+        expect(() => withTarget([])).toThrow('"target" must be');
+        expect(() => withTarget(['a', 3])).toThrow('"target" must be');
+        expect(withTarget(['a', 'b']).properties.a.relationship!.target).toEqual(['a', 'b']);
     });
 });
 
@@ -383,6 +478,30 @@ describe('convertNotesToFields', () => {
         const after = structuredClone(g);
         expect(convertNotesToFields(g, [npc])).toBe(0);
         expect(g).toEqual(after);
+    });
+
+    it('converts to the type of the field, and keeps the note when the value does not fit', () => {
+        const pet = parseSchema({
+            name: 'add_pet', description: 'd',
+            properties: {
+                age: {type: 'number', description: 'Age'},
+                vaccinated: {type: 'boolean', description: 'Shots'},
+                born: {type: 'date', description: 'Born'},
+            },
+        });
+        const g: Graph = {
+            nodes: [
+                {type: 'node', name: 'Rex', nodeType: 'pet', metadata: ['age: 7', 'vaccinated: true', 'born: 2019-03-09']},
+                {type: 'node', name: 'Tom', nodeType: 'pet', metadata: ['age: quite old', 'vaccinated: probably', 'born: spring']},
+            ],
+            edges: [],
+        };
+        expect(convertNotesToFields(g, [pet])).toBe(1);
+        expect(g.nodes[0]).toEqual({
+            type: 'node', name: 'Rex', nodeType: 'pet', fields: {age: 7, vaccinated: true, born: '2019-03-09'}, metadata: [],
+        });
+        expect(g.nodes[1].fields).toBeUndefined();
+        expect(g.nodes[1].metadata).toEqual(['age: quite old', 'vaccinated: probably', 'born: spring']);
     });
 
     it('never overwrites a field that already has a value', () => {

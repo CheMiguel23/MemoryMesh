@@ -84,16 +84,16 @@ describe('GraphStore', () => {
 
     it('writes fields before metadata, and tidies fields that were edited by hand', async () => {
         writeFileSync(path.join(dir, 'm.json'), [
-            '{"type":"node","name":"A","nodeType":"t","metadata":["note"],"fields":{"age":42,"tags":["a",1],"role":"smith"}}',
+            '{"type":"node","name":"A","nodeType":"t","metadata":["note"],"fields":{"age":42,"tags":["a",1],"role":"smith","odd":{"x":1}}}',
             '{"type":"node","name":"B","nodeType":"t","metadata":[],"fields":{}}',
             '{"type":"node","name":"C","nodeType":"t","metadata":[],"fields":"oops"}',
         ].join('\n') + '\n');
         const store = new GraphStore(path.join(dir, 'm.json'));
-        expect((await store.read()).nodes[0].fields).toEqual({age: '42', tags: ['a', '1'], role: 'smith'});
+        expect((await store.read()).nodes[0].fields).toEqual({age: 42, tags: ['a', '1'], role: 'smith', odd: '{"x":1}'});
 
         await store.update(() => undefined);
         expect(readFileSync(path.join(dir, 'm.json'), 'utf-8')).toBe([
-            '{"type":"node","name":"A","nodeType":"t","fields":{"age":"42","tags":["a","1"],"role":"smith"},"metadata":["note"]}',
+            '{"type":"node","name":"A","nodeType":"t","fields":{"age":42,"tags":["a","1"],"role":"smith","odd":"{\\"x\\":1}"},"metadata":["note"]}',
             '{"type":"node","name":"B","nodeType":"t","metadata":[]}',
             '{"type":"node","name":"C","nodeType":"t","metadata":[]}',
         ].join('\n') + '\n');

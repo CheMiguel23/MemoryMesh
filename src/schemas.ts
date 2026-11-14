@@ -11,13 +11,14 @@
  *   "description": "...",              // description of the add_ tool
  *   "properties": {
  *     "currentLocation": {
- *       "type": "string" | "array",
+ *       "type": "string" | "array" | "number" | "boolean" | "date",
  *       "description": "...",
  *       "required": true,              // optional
- *       "enum": ["a", "b"],            // optional
- *       "relationship": {              // optional: also creates an edge to the named node(s)
+ *       "enum": ["a", "b"],            // optional, for "string" and "array"
+ *       "relationship": {              // optional: the field becomes an edge to the named node(s)
  *         "edgeType": "located_in",
- *         "description": "..."
+ *         "description": "...",        // optional
+ *         "target": "location"         // optional: the node type(s) it may point at
  *       }
  *     }
  *   },
@@ -37,11 +38,18 @@ export interface SchemaProperty {
     description: string;
     required?: boolean;
     enum?: string[];
-    relationship?: {
-        edgeType: string;
-        description?: string;
-    };
+    relationship?: Relationship;
 }
+
+export interface Relationship {
+    edgeType: string;
+    description?: string;
+    /** The node type, or types, this relationship may point at. Any type when left out. */
+    target?: string | string[];
+}
+
+const targetTypes = (relationship: Relationship): string[] =>
+    relationship.target === undefined ? [] : [relationship.target].flat();
 
 export interface EntitySchema {
     /** Node type and tool suffix, e.g. "npc" for add_npc. */
@@ -58,7 +66,9 @@ const RESERVED_ENTITIES = new Set(['nodes', 'edges', 'metadata']);
 const MAX_TOOL_NAME_LENGTH = 64;
 const MAX_ENTITY_LENGTH = MAX_TOOL_NAME_LENGTH - 'update_'.length;
 
-const PROPERTY_TYPES = ['string', 'array'];
+const PROPERTY_TYPES = ['string', 'array', 'number', 'boolean', 'date'];
+/** The types whose values can be limited to a list of allowed texts. */
+const ENUM_TYPES = ['string', 'array'];
 
 const isPlainObject = (value: unknown): value is Record<string, any> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -99,12 +109,20 @@ export function parseSchema(raw: any): EntitySchema {
             (!Array.isArray(config.enum) || config.enum.length === 0 || !config.enum.every(isNonEmptyString))) {
             throw new Error(`property "${prop}": "enum" must be a list of at least one text value`);
         }
+        if (config.enum !== undefined && PROPERTY_TYPES.includes(config.type) && !ENUM_TYPES.includes(config.type)) {
+            throw new Error(`property "${prop}": "enum" only works with the types "string" and "array"`);
+        }
         if (config.relationship !== undefined && config.relationship !== null && config.relationship !== false) {
             if (!isPlainObject(config.relationship) || !isNonEmptyString(config.relationship.edgeType)) {
                 throw new Error(`property "${prop}" has a relationship without an edgeType`);
             }
             if (config.relationship.description !== undefined && typeof config.relationship.description !== 'string') {
                 throw new Error(`property "${prop}": the relationship "description" must be text`);
+            }
+            const target = config.relationship.target;
+            const targets = [target].flat();
+            if (target !== undefined && (targets.length === 0 || !targets.every(isNonEmptyString))) {
+                throw new Error(`property "${prop}": the relationship "target" must be a node type or a list of node types`);
             }
         }
     }
@@ -126,7 +144,7 @@ export function schemaWarnings(schema: EntitySchema): string[] {
 
     for (const [name, prop] of Object.entries(schema.properties)) {
         if (!PROPERTY_TYPES.includes(prop.type)) {
-            warnings.push(`property "${name}" has type "${prop.type}", which is treated as "string" (use "string" or "array")`);
+            warnings.push(`property "${name}" has type "${prop.type}", which is treated as "string" (use ${PROPERTY_TYPES.map(t => `"${t}"`).join(', ')})`);
         }
         if (name === 'metadata') {
             warnings.push(`property "metadata" clashes with the "metadata" argument of update_${schema.entity}, which replaces all metadata; rename it`);
@@ -187,12 +205,26 @@ function toJsonSchema(name: string, prop: SchemaProperty): Record<string, unknow
     const item = (extra: object = {}) => ({type: 'string', description: `Item in ${name} array`, ...extra});
     if (prop.relationship) {
         // Relationship fields accept one or more target node names.
-        return {type: 'array', description: prop.relationship.description ?? prop.description, items: item()};
+        const targets = targetTypes(prop.relationship);
+        const what = targets.length > 0 ? `The name of an existing ${targets.join(' or ')}` : 'The name of an existing node';
+        return {
+            type: 'array',
+            description: prop.relationship.description ?? prop.description,
+            items: {type: 'string', description: what},
+        };
     }
-    if (prop.type === 'array') {
-        return {type: 'array', description: prop.description, items: item(prop.enum ? {enum: prop.enum} : {})};
+    switch (prop.type) {
+        case 'array':
+            return {type: 'array', description: prop.description, items: item(prop.enum ? {enum: prop.enum} : {})};
+        case 'number':
+            return {type: 'number', description: prop.description};
+        case 'boolean':
+            return {type: 'boolean', description: prop.description};
+        case 'date':
+            return {type: 'string', description: `${prop.description} (a date written as YYYY-MM-DD)`};
+        default:
+            return {type: 'string', description: prop.description, ...(prop.enum ? {enum: prop.enum} : {})};
     }
-    return {type: 'string', description: prop.description, ...(prop.enum ? {enum: prop.enum} : {})};
 }
 
 function propertiesFor(schema: EntitySchema): Record<string, unknown> {
@@ -340,14 +372,44 @@ const isScalar = (value: unknown): value is string | number | boolean =>
  */
 function fieldValue(field: string, prop: SchemaProperty | undefined, value: unknown): FieldValue {
     const isList = Array.isArray(value) && value.every(isScalar);
-    if (prop?.type === 'array') {
-        if (isList) return (value as unknown[]).map(String);
-        if (isScalar(value)) return [String(value)];
-        throw new Error(`"${field}" must be a list of text values`);
+    if (!prop) {
+        if (isScalar(value)) return value;
+        return isList ? (value as unknown[]).map(String) : JSON.stringify(value);
     }
-    if (isScalar(value)) return String(value);
-    if (prop) throw new Error(`"${field}" must be a single text value, not a list or an object`);
-    return isList ? (value as unknown[]).map(String) : JSON.stringify(value);
+    // An AI sometimes sends "42" or "true" as text; that is accepted where the meaning is clear.
+    const text = typeof value === 'string' ? value.trim() : undefined;
+    switch (prop.type) {
+        case 'array':
+            if (isList) return (value as unknown[]).map(String);
+            if (isScalar(value)) return [String(value)];
+            throw new Error(`"${field}" must be a list of text values`);
+        case 'number': {
+            const number = typeof value === 'number' ? value : text ? Number(text) : NaN;
+            if (Number.isFinite(number)) return number;
+            throw new Error(`"${field}" must be a number`);
+        }
+        case 'boolean':
+            if (typeof value === 'boolean') return value;
+            if (text?.toLowerCase() === 'true') return true;
+            if (text?.toLowerCase() === 'false') return false;
+            throw new Error(`"${field}" must be true or false`);
+        case 'date':
+            if (text && isDate(text)) return text;
+            throw new Error(`"${field}" must be a date written as YYYY-MM-DD`);
+        default:
+            if (isScalar(value)) return String(value);
+            throw new Error(`"${field}" must be a single text value, not a list or an object`);
+    }
+}
+
+/** A calendar date as YYYY-MM-DD, optionally followed by a time (2024-03-09 or 2024-03-09T14:30:00Z). */
+function isDate(text: string): boolean {
+    const match = /^(\d{4})-(\d{2})-(\d{2})(T[\d:.]+(Z|[+-]\d{2}:\d{2})?)?$/.exec(text);
+    if (!match) return false;
+    const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+    const date = new Date(Date.UTC(year, month - 1, day));
+    // Rejects dates that do not exist, such as 2024-02-31.
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
 function notes(value: unknown): string[] {
@@ -363,19 +425,27 @@ function noteKey(entry: string): string | null {
 }
 
 /** Builds the edges a relationship field implies, checking every target exists first. */
-function relationshipEdges(graph: Graph, from: string, field: string, edgeType: string, value: unknown): Edge[] {
+function relationshipEdges(graph: Graph, from: string, field: string, relationship: Relationship, value: unknown): Edge[] {
     const targets = typeof value === 'string' ? [value] : requireArray(value, field);
+    const allowedTypes = targetTypes(relationship);
     return [...new Set(targets)].map(target => {
         if (typeof target !== 'string' || target.trim() === '') {
             throw new Error(`Every value in "${field}" must be a node name`);
         }
-        if (!findNode(graph, target)) {
+        const node = findNode(graph, target);
+        if (!node) {
             throw new Error(
                 `Cannot link "${from}" to "${target}" via "${field}": no node named "${target}" exists. ` +
                 `Create it first, or leave "${field}" out.`
             );
         }
-        return {type: 'edge', from, to: target, edgeType};
+        if (allowedTypes.length > 0 && !allowedTypes.includes(node.nodeType)) {
+            throw new Error(
+                `Cannot link "${from}" to "${target}" via "${field}": "${target}" is a ${node.nodeType}, ` +
+                `but "${field}" must name a ${allowedTypes.join(' or ')}.`
+            );
+        }
+        return {type: 'edge', from, to: target, edgeType: relationship.edgeType};
     });
 }
 
@@ -416,7 +486,7 @@ export function addEntity(graph: Graph, schema: EntitySchema, input: unknown): {
         if (NOT_FIELDS.includes(field) || !hasValue(value)) continue;
         const relationship = properties[field]?.relationship;
         if (relationship) {
-            edges.push(...relationshipEdges(graph, args.name, field, relationship.edgeType, value));
+            edges.push(...relationshipEdges(graph, args.name, field, relationship, value));
         } else {
             setField(node, field, fieldValue(field, properties[field], value));
         }
@@ -460,7 +530,7 @@ export function updateEntity(
         const relationship = properties[field]?.relationship;
         if (relationship) {
             // The field owns every edge of its type leaving this node, so all of them are replaced.
-            const newEdges = relationshipEdges(graph, node.name, field, relationship.edgeType, value);
+            const newEdges = relationshipEdges(graph, node.name, field, relationship, value);
             const old = graph.edges.filter(e => e.from === node.name && e.edgeType === relationship.edgeType);
             graph.edges = graph.edges.filter(e => !old.includes(e));
             removedEdges.push(...old);
@@ -524,7 +594,12 @@ export function convertNotesToFields(graph: Graph, schemas: EntitySchema[]): num
                 remaining.push(entry);
             } else if (value !== '') {
                 const list = value.split(', ').map(item => item.trim()).filter(item => item !== '');
-                setField(node, field, prop.type === 'array' ? list : value);
+                try {
+                    setField(node, field, fieldValue(field, prop, prop.type === 'array' ? list : value));
+                } catch {
+                    // Not a valid number, date, ... for this field: better kept as a note than lost.
+                    remaining.push(entry);
+                }
             }
         }
         if (remaining.length !== node.metadata.length) {

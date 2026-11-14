@@ -9,6 +9,9 @@
   - `add_<entity>` accepts `metadata` for notes, and `update_<entity>`'s `metadata` replaces the notes only, not the fields.
   - An empty value (`""` or `[]`) clears a field. A required field cannot be cleared.
   - `add_nodes` and `update_nodes` accept `fields`. `add_nodes` no longer requires `metadata`.
+- **New field types: `number`, `boolean` and `date`**, next to `string` and `array`. Values are checked and stored in their own type, so `"age": "old"` is rejected and `"age": 7` is stored as a number. The same value written as text (`"7"`, `"true"`) is accepted.
+- **A relationship can say what it points at.** With `"relationship": {"edgeType": "located_in", "target": "location"}`, linking to a node of another type is rejected with an explanation. `target` can also be a list of types. The bundled `npc` and `location` examples use it.
+- **SchemaManager offers the new types and the relationship target.**
 - **Existing memory is converted automatically.** On the first start, notes that belong to a field of the node's schema are moved into `fields`. The file as it was is kept next to it as `memory.json.before-fields.bak`. Notes that match no schema field stay notes.
 - **`search_nodes` also looks at fields and at what a node links to**, so `blacksmith riverton` finds the blacksmith whose location is recorded only as an edge to Riverton.
 - **MemoryViewer shows fields** together with the notes.

@@ -14,7 +14,9 @@ function asNode(item: any): Node | undefined {
     const fields: Record<string, FieldValue> = {};
     if (typeof rawFields === 'object' && rawFields !== null && !Array.isArray(rawFields)) {
         for (const [key, value] of Object.entries(rawFields)) {
-            fields[key] = Array.isArray(value) ? value.map(asText) : asText(value);
+            const isScalar = isString(value) || typeof value === 'boolean' ||
+                (typeof value === 'number' && Number.isFinite(value));
+            fields[key] = Array.isArray(value) ? value.map(asText) : isScalar ? value : asText(value);
         }
     }
     const metadata = Array.isArray(rawMetadata) ? rawMetadata.map(asText) : [];

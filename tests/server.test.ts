@@ -163,8 +163,8 @@ describe('static tools', () => {
         const r = await call('update_nodes', {nodes: [{name: 'Ring', fields: {owner: 'Gollum', powers: [], age: 'ancient'}}]});
         expect(r.text).toContain('"fields":{"owner":"Gollum","age":"ancient"}');
         expect((await call('search_nodes', {query: 'owner: gollum'})).text).toContain('found 1 node');
-        expect((await call('add_nodes', {nodes: [{name: 'X', nodeType: 't', fields: {n: 1}}]})).text)
-            .toBe('Error: nodes[0].fields.n must be a string or an array of strings');
+        expect((await call('add_nodes', {nodes: [{name: 'X', nodeType: 't', fields: {n: {a: 1}}}]})).text)
+            .toBe('Error: nodes[0].fields.n must be a string, a number, true/false, or an array of strings');
     });
 
     it('returns data as compact JSON after a one-line summary', async () => {

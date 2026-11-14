@@ -51,6 +51,10 @@ describe('nodes', () => {
         const g = sample();
         const [ring] = graph.addNodes(g, [{name: 'Ring', nodeType: 'item', fields: {owner: 'Frodo', powers: ['invisibility'], empty: ''}}]);
         expect(ring).toEqual({type: 'node', name: 'Ring', nodeType: 'item', fields: {owner: 'Frodo', powers: ['invisibility']}, metadata: []});
+        graph.updateNodes(g, [{name: 'Ring', fields: {weight: 0, cursed: false}}]);
+        expect(ring.fields).toEqual({owner: 'Frodo', powers: ['invisibility'], weight: 0, cursed: false});
+        expect(graph.searchNodes({...g, edges: []}, 'cursed: false weight: 0').nodes.map(n => n.name)).toEqual(['Ring']);
+        graph.updateNodes(g, [{name: 'Ring', fields: {weight: '', cursed: ''}}]);
         expect(Object.keys(ring)).toEqual(['type', 'name', 'nodeType', 'fields', 'metadata']);
 
         // Only the fields that are passed change; a blank value removes one.
@@ -60,7 +64,8 @@ describe('nodes', () => {
         expect(ring).toEqual({type: 'node', name: 'Ring', nodeType: 'item', metadata: []});
 
         expect(() => graph.addNodes(g, [{name: 'X', nodeType: 't', fields: ['a']}])).toThrow('nodes[0].fields must be an object');
-        expect(() => graph.updateNodes(g, [{name: 'Ring', fields: {weight: 3}}])).toThrow('fields.weight must be a string or an array of strings');
+        expect(() => graph.updateNodes(g, [{name: 'Ring', fields: {weight: [3]}}])).toThrow('fields.weight must be a string, a number');
+        expect(() => graph.updateNodes(g, [{name: 'Ring', fields: {weight: NaN}}])).toThrow('fields.weight must be');
     });
 
     it('trims names when adding, so " Sam " cannot exist next to "Sam"', () => {

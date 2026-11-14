@@ -45,7 +45,7 @@ Each schema is a JSON file ending in `.schema.json`. This is the `npc` example t
     "currentLocation": {
       "type": "string",
       "description": "Where the character is now",
-      "relationship": { "edgeType": "located_in", "description": "Where the character is now (must already exist)" }
+      "relationship": { "edgeType": "located_in", "target": "location", "description": "Where the character is now (must already exist)" }
     }
   },
   "additionalProperties": true
@@ -56,10 +56,10 @@ Each schema is a JSON file ending in `.schema.json`. This is the `npc` example t
 |---|---|
 | `name` | Must start with `add_`. The rest becomes the node type and tool suffix (`npc` → `add_npc`, `update_npc`, `delete_npc`). |
 | `description` | Description of the `add_` tool, shown to the AI. |
-| `properties` | The fields. Each has a `type` (`string` or `array`) and a `description`, plus optionally: |
+| `properties` | The fields. Each has a `type` and a `description`, plus optionally the keys below. The types are `string`, `array` (a list of texts), `number`, `boolean` and `date` (written as `2024-03-09`). |
 | ↳ `required` | `true` if the AI must provide this field. Keep this to a minimum, or the AI will invent values it doesn't know. |
-| ↳ `enum` | A list of allowed values. Anything else is rejected. |
-| ↳ `relationship` | Creates an edge (`edgeType`) to each node named in this field. Those nodes must already exist. Updating the field replaces every edge of that `edgeType` going out from the node, so give each relationship field its own `edgeType`. |
+| ↳ `enum` | A list of allowed values, for `string` and `array` fields. Anything else is rejected. |
+| ↳ `relationship` | Creates an edge (`edgeType`) to each node named in this field. Those nodes must already exist. Add `"target": "location"` (or a list of types) to only allow nodes of that type. Updating the field replaces every edge of that `edgeType` going out from the node, so give each relationship field its own `edgeType`. |
 | `additionalProperties` | `true` (default) saves fields not listed above as extra fields; `false` rejects them. |
 
 If a schema file is invalid, MemoryMesh skips it, logs the reason, and starts with the others. It also logs a warning for a schema that loads but probably won't behave as you expect, such as two relationship fields sharing an `edgeType`.

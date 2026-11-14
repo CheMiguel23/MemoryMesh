@@ -30,7 +30,8 @@
       "description": "Where the character is now",
       "relationship": {
         "edgeType": "located_in",
-        "description": "Where the character is now (the location must already exist)"
+        "description": "Where the character is now (the location must already exist)",
+        "target": "location"
       }
     }
   },

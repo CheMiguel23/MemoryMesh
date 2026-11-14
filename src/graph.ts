@@ -49,10 +49,11 @@ export const isBlank = (value: unknown) =>
 function requireFields(value: unknown, what: string): Record<string, FieldValue> {
     const fields = requireObject(value, what);
     for (const [key, item] of Object.entries(fields)) {
-        const isText = typeof item === 'string';
+        const isScalar = typeof item === 'string' || typeof item === 'boolean' ||
+            (typeof item === 'number' && Number.isFinite(item));
         const isTextList = Array.isArray(item) && item.every(entry => typeof entry === 'string');
-        if (!isText && !isTextList) {
-            throw new Error(`${what}.${key} must be a string or an array of strings`);
+        if (!isScalar && !isTextList) {
+            throw new Error(`${what}.${key} must be a string, a number, true/false, or an array of strings`);
         }
     }
     return fields as Record<string, FieldValue>;
