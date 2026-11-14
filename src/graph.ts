@@ -82,7 +82,8 @@ export function addNodes(graph: Graph, input: unknown): Node[] {
         const item = requireObject(raw, `nodes[${i}]`);
         const node: Node = {
             type: 'node',
-            name: requireString(item.name, `nodes[${i}].name`),
+            // Trimmed, so that " Mara " cannot be created next to "Mara".
+            name: requireString(item.name, `nodes[${i}].name`).trim(),
             nodeType: requireString(item.nodeType, `nodes[${i}].nodeType`),
             metadata: requireStringArray(item.metadata ?? [], `nodes[${i}].metadata`),
         };
@@ -106,9 +107,53 @@ export function updateNodes(graph: Graph, input: unknown): Node[] {
         if (item.metadata !== undefined) {
             node.metadata = requireStringArray(item.metadata, `nodes[${i}].metadata`);
         }
+        if (item.newName !== undefined) {
+            renameNode(graph, node, requireString(item.newName, `nodes[${i}].newName`).trim());
+        }
         updated.push(node);
     }
     return updated;
+}
+
+/** Rewrites the value of a "key: value" metadata entry; entries without a colon are left alone. */
+function mapMetadataValue(entry: string, change: (key: string, value: string) => string): string {
+    const colon = entry.indexOf(':');
+    if (colon === -1) return entry;
+    const key = entry.slice(0, colon);
+    const value = entry.slice(colon + 1).trim();
+    const changed = change(key.trim().toLowerCase(), value);
+    return changed === value ? entry : `${key}: ${changed}`;
+}
+
+/**
+ * Renames a node everywhere it is referred to:
+ *  - the edges that start or end at it,
+ *  - its own "name: ..." metadata entry (schema tools store one),
+ *  - metadata of nodes linking to it that names it, e.g. "currentLocation: Town"
+ *    or "allies: Ann, Town" (schema tools store relationship targets this way).
+ */
+function renameNode(graph: Graph, node: Node, newName: string): void {
+    const oldName = node.name;
+    if (newName === oldName) return;
+    if (findNode(graph, newName)) {
+        throw new Error(`Cannot rename "${oldName}" to "${newName}": a node with that name already exists`);
+    }
+
+    const linkingToIt = new Set(graph.edges.filter(edge => edge.to === oldName).map(edge => edge.from));
+    for (const other of graph.nodes) {
+        if (other === node || !linkingToIt.has(other.name)) continue;
+        other.metadata = other.metadata.map(entry => mapMetadataValue(entry, (_key, value) =>
+            value.split(', ').map(item => (item === oldName ? newName : item)).join(', ')
+        ));
+    }
+    node.metadata = node.metadata.map(entry => mapMetadataValue(entry, (key, value) =>
+        key === 'name' && value === oldName ? newName : value
+    ));
+    for (const edge of graph.edges) {
+        if (edge.from === oldName) edge.from = newName;
+        if (edge.to === oldName) edge.to = newName;
+    }
+    node.name = newName;
 }
 
 /** Deletes nodes and every edge touching them. Returns the names that existed. */

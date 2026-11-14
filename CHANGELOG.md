@@ -1,5 +1,18 @@
 ## Changelog
 
+### Unreleased
+
+- **Nodes can be renamed.** `update_nodes` accepts `newName`. The node's edges follow, and so does metadata that refers to it by name: its own `name: ...` entry, and entries such as `currentLocation: Town` on nodes linked to it.
+- **Two MCP clients can safely share one memory file.** Each change now takes a short-lived lock file (`memory.json.lock`) next to the memory file. Without it, two MemoryMesh processes writing at the same time could each overwrite the other's change. A lock left behind by a crashed process is ignored after 10 seconds.
+- **Names are trimmed when a node is created**, so `" Mara "` can no longer be added next to `"Mara"`.
+- **Tools carry MCP annotations** saying whether they only read (`read_graph`, `search_nodes`, `open_nodes`), only add, or change existing data. Clients use these to decide when to ask for confirmation.
+- **Tool results use compact JSON** instead of indented JSON, which makes every result, and `read_graph` on a large graph in particular, take less of the AI's context. The format is otherwise the same: a one-line summary, a blank line, then the data.
+- **Node.js 22 or newer is now required** (`engines` in `package.json`). Node 18 and 20 have reached end-of-life, and the tests run on 22 and 24.
+- **SchemaManager checks a schema the way the server does** before generating or saving it, so it no longer produces schemas that MemoryMesh skips: a description is required for the schema and every property, a relationship needs an edge type, an enum needs at least one value, and the name must be usable as a tool name. Typing a property name now shows a hint when it is a duplicate or `metadata`; that hint called a function that did not exist, raising an error on every keystroke.
+- **MemoryViewer skips lines it cannot read** and says which, instead of refusing to show the whole file because of one bad line.
+
+---
+
 ### v0.5.0 (2026-11-14)
 
 - **The memory file now defaults to `.memorymesh/memory.json` in your home folder** instead of `dist/data/memory.json`, where deleting or cleaning the build folder deleted it. An existing `dist/data/memory.json` keeps being used, with a warning in the log explaining how to move it. `MEMORYMESH_MEMORY_FILE` works as before.

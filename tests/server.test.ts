@@ -65,6 +65,24 @@ describe('tools/list', () => {
         expect(new Set(names).size).toBe(names.length);
     });
 
+    it('tells clients which tools only read, which only add, and which change existing data', () => {
+        const hints = (name: string) => tools.find(t => t.name === name)!.annotations;
+        for (const tool of tools) {
+            expect(tool.annotations, tool.name).toBeDefined();
+            expect(tool.annotations!.openWorldHint, tool.name).toBe(false);
+        }
+        for (const name of ['read_graph', 'search_nodes', 'open_nodes']) {
+            expect(hints(name)!.readOnlyHint, name).toBe(true);
+        }
+        for (const name of ['add_nodes', 'add_edges', 'add_metadata', 'add_npc', 'add_location']) {
+            expect(hints(name), name).toMatchObject({readOnlyHint: false, destructiveHint: false});
+        }
+        for (const name of ['update_nodes', 'update_edges', 'delete_nodes', 'delete_edges', 'delete_metadata',
+            'update_npc', 'delete_npc', 'update_location', 'delete_location']) {
+            expect(hints(name), name).toMatchObject({readOnlyHint: false, destructiveHint: true});
+        }
+    });
+
     it('every tool definition follows the MCP spec', () => {
         const validTypes = ['string', 'number', 'integer', 'boolean', 'array', 'object', 'null'];
         const checkProperty = (prop: any, where: string) => {
@@ -106,7 +124,7 @@ describe('static tools', () => {
         expect((await call('add_edges', {edges: [{from: 'Frodo', to: 'Shire', edgeType: 'lives_in'}]})).isError).toBe(false);
         expect((await call('update_edges', {edges: [
             {from: 'Frodo', to: 'Shire', edgeType: 'lives_in', newWeight: 0.8},
-        ]})).text).toContain('"weight": 0.8');
+        ]})).text).toContain('"weight":0.8');
         expect((await call('add_metadata', {metadata: [{nodeName: 'Frodo', contents: ['bearer: yes']}]})).isError).toBe(false);
 
         const search = await call('search_nodes', {query: 'hobbit'});
@@ -118,13 +136,34 @@ describe('static tools', () => {
 
         expect((await call('delete_metadata', {deletions: [{nodeName: 'Frodo', metadata: ['bearer: yes']}]})).text)
             .toBe('Deleted 1 metadata entry');
-        expect((await call('update_nodes', {nodes: [{name: 'Frodo', nodeType: 'hero'}]})).text).toContain('"nodeType": "hero"');
+        expect((await call('update_nodes', {nodes: [{name: 'Frodo', nodeType: 'hero'}]})).text).toContain('"nodeType":"hero"');
         expect((await call('delete_edges', {edges: [{from: 'Frodo', to: 'Shire', edgeType: 'lives_in'}]})).text)
             .toBe('Deleted 1 edge');
         expect((await call('delete_nodes', {nodeNames: ['Shire', 'Mordor']})).text)
             .toBe('Deleted 1 node and their edges: "Shire". Not found: "Mordor"');
 
         expect((await call('read_graph')).text).toContain('(1 node, 0 edges)');
+    });
+
+    it('update_nodes renames a node and everything that refers to it', async () => {
+        await seedTown();
+        await call('add_npc', {npc: {name: 'Bob', description: 'A man', currentLocation: ['Town']}});
+        const r = await call('update_nodes', {nodes: [{name: 'Town', newName: 'Riverton'}]});
+        expect(r.text).toContain('Updated 1 node: "Riverton"');
+
+        const lines = memory().trimEnd().split('\n').map(line => JSON.parse(line));
+        expect(lines.find(l => l.nodeType === 'location').metadata).toContain('name: Riverton');
+        expect(lines.find(l => l.name === 'Bob').metadata).toContain('currentLocation: Riverton');
+        expect(lines.find(l => l.type === 'edge')).toMatchObject({from: 'Bob', to: 'Riverton'});
+        expect(memory()).not.toContain('Town');
+    });
+
+    it('returns data as compact JSON after a one-line summary', async () => {
+        await call('add_nodes', {nodes: [{name: 'Frodo', nodeType: 'npc', metadata: ['race: Hobbit']}]});
+        expect((await call('read_graph')).text).toBe(
+            'Read complete knowledge graph (1 node, 0 edges)\n\n' +
+            '{"nodes":[{"type":"node","name":"Frodo","nodeType":"npc","metadata":["race: Hobbit"]}],"edges":[]}'
+        );
     });
 
     it('delete results are not empty, so the AI can see what happened', async () => {
@@ -198,7 +237,7 @@ describe('schema tools', () => {
         await call('add_npc', {npc: {name: 'Bob', description: 'A grumpy blacksmith', currentLocation: ['Town']}});
         const r = await call('search_nodes', {query: 'blacksmith town'});
         expect(r.text).toContain('found 2 nodes');
-        expect(r.text).toContain('"name": "Bob"');
+        expect(r.text).toContain('"name":"Bob"');
     });
 
     it('update_npc can replace all metadata', async () => {

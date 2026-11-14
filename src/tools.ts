@@ -1,12 +1,29 @@
 /** Built-in tools that work with any node type. */
 
-import type {Tool} from '@modelcontextprotocol/sdk/types.js';
+import type {Tool, ToolAnnotations} from '@modelcontextprotocol/sdk/types.js';
+
+/**
+ * Hints that tell a client how careful it needs to be with a tool, e.g. whether to ask
+ * the user before running it. Nothing here reaches outside the memory file, hence
+ * openWorldHint: false everywhere.
+ */
+export const ANNOTATIONS = {
+    /** Only reads the graph. */
+    read: {readOnlyHint: true, openWorldHint: false},
+    /** Only adds new things; fails rather than overwrite. */
+    add: {readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false},
+    /** Adds only what is missing, so repeating the call changes nothing more. */
+    addOnce: {readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false},
+    /** Replaces or removes existing data. Repeating the call changes nothing more. */
+    change: {readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false},
+} satisfies Record<string, ToolAnnotations>;
 
 export const staticTools: Tool[] = [
     // --- Nodes and edges ---
     {
         name: "add_nodes",
         description: "Add multiple new nodes in the knowledge graph",
+        annotations: ANNOTATIONS.add,
         inputSchema: {
             type: "object",
             properties: {
@@ -35,7 +52,8 @@ export const staticTools: Tool[] = [
 
     {
         name: "update_nodes",
-        description: "Update existing nodes in the knowledge graph",
+        description: "Update existing nodes in the knowledge graph: rename them, change their type, or replace their metadata. Only the fields you pass are changed",
+        annotations: ANNOTATIONS.change,
         inputSchema: {
             type: "object",
             properties: {
@@ -46,7 +64,11 @@ export const staticTools: Tool[] = [
                         type: "object",
                         description: "Node to update",
                         properties: {
-                            name: {type: "string", description: "The name of the node to update"},
+                            name: {type: "string", description: "The current name of the node to update"},
+                            newName: {
+                                type: "string",
+                                description: "A new name for the node. Its edges, and metadata of linked nodes that refers to it by name, are updated to match"
+                            },
                             nodeType: {type: "string", description: "The new type of the node"},
                             metadata: {
                                 type: "array",
@@ -65,6 +87,7 @@ export const staticTools: Tool[] = [
     {
         name: "add_edges",
         description: "Add multiple new edges between nodes in the knowledge graph. Edges should be in active voice",
+        annotations: ANNOTATIONS.add,
         inputSchema: {
             type: "object",
             properties: {
@@ -96,6 +119,7 @@ export const staticTools: Tool[] = [
     {
         name: "update_edges",
         description: "Update existing edges in the knowledge graph",
+        annotations: ANNOTATIONS.change,
         inputSchema: {
             type: "object",
             properties: {
@@ -130,6 +154,7 @@ export const staticTools: Tool[] = [
     {
         name: "delete_nodes",
         description: "Delete multiple nodes and their associated edges from the knowledge graph",
+        annotations: ANNOTATIONS.change,
         inputSchema: {
             type: "object",
             properties: {
@@ -146,6 +171,7 @@ export const staticTools: Tool[] = [
     {
         name: "delete_edges",
         description: "Delete multiple edges from the knowledge graph",
+        annotations: ANNOTATIONS.change,
         inputSchema: {
             type: "object",
             properties: {
@@ -171,7 +197,8 @@ export const staticTools: Tool[] = [
     // --- Reading ---
     {
         name: "read_graph",
-        description: "Read the entire knowledge graph",
+        description: "Read the entire knowledge graph. On a large graph, prefer search_nodes or open_nodes to fetch only what is needed",
+        annotations: ANNOTATIONS.read,
         inputSchema: {
             type: "object",
             properties: {},
@@ -181,6 +208,7 @@ export const staticTools: Tool[] = [
     {
         name: "search_nodes",
         description: "Search for nodes in the knowledge graph. Returns the nodes that contain every word of the query in their name, type or metadata, plus their direct neighbours",
+        annotations: ANNOTATIONS.read,
         inputSchema: {
             type: "object",
             properties: {
@@ -196,6 +224,7 @@ export const staticTools: Tool[] = [
     {
         name: "open_nodes",
         description: "Open specific nodes in the knowledge graph by their names",
+        annotations: ANNOTATIONS.read,
         inputSchema: {
             type: "object",
             properties: {
@@ -213,6 +242,7 @@ export const staticTools: Tool[] = [
     {
         name: "add_metadata",
         description: "Add new metadata to existing nodes in the knowledge graph",
+        annotations: ANNOTATIONS.addOnce,
         inputSchema: {
             type: "object",
             properties: {
@@ -241,6 +271,7 @@ export const staticTools: Tool[] = [
     {
         name: "delete_metadata",
         description: "Delete specific metadata from nodes in the knowledge graph",
+        annotations: ANNOTATIONS.change,
         inputSchema: {
             type: "object",
             properties: {

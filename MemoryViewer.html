@@ -638,15 +638,32 @@ const transaction = db.transaction([STORE_NAME], 'readwrite');
                 const file = await fileHandle.getFile();
                 const content = await file.text();
 
-                // Split content into lines and parse each line as JSON
-                const lines = content.split('\n');
-                const jsonObjects = lines
-                    .filter(line => line.trim() !== '')
-                    .map(line => JSON.parse(line));
+                // Each line is one JSON object. A line that can't be read is skipped and
+                // reported, so one bad line doesn't hide the rest of the memory.
+                const jsonObjects = [];
+                const skipped = [];
+                content.split('\n').forEach((line, index) => {
+                    if (line.trim() === '') return;
+                    try {
+                        const item = JSON.parse(line);
+                        if (typeof item !== 'object' || item === null) throw new Error('not an object');
+                        jsonObjects.push(item);
+                    } catch {
+                        skipped.push(index + 1);
+                    }
+                });
 
                 currentData = jsonObjects;
                 updateViews(jsonObjects);
-                showToast('Memory file loaded successfully!', 'success');
+                if (skipped.length === 0) {
+                    showToast('Memory file loaded successfully!', 'success');
+                } else {
+                    const shown = skipped.slice(0, 5).join(', ') + (skipped.length > 5 ? ', ...' : '');
+                    showToast(
+                        `Loaded, but skipped ${skipped.length} line(s) that could not be read (line ${shown})`,
+                        'error', 8000
+                    );
+                }
             } catch (error) {
                 showToast('Error loading memory file: ' + error.message, 'error');
             }

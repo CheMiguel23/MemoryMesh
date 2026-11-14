@@ -15,7 +15,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc && node scripts/copy-schemas.mjs",

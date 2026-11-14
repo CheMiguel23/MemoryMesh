@@ -278,6 +278,12 @@
             background-color: var(--danger);
         }
 
+        .validation-message {
+            color: var(--danger);
+            font-size: 0.85em;
+            margin-top: 4px;
+        }
+
         @keyframes slideIn {
             to {
                 opacity: 1;
@@ -577,15 +583,10 @@
             try {
                 const schemaContent = editor.getValue();
                 const schema = JSON.parse(schemaContent);
-                if (!schema.name) throw new Error('Schema must have a name property');
-                if (!schema.properties) throw new Error('Schema must have properties defined');
-
-                // Check for schema name uniqueness before saving
-                const isSchemaNameUnique = await schemaValidator.isSchemaNameUnique(schema.name);
-                if (!isSchemaNameUnique) {
-                    showToast(`A schema with the name "${schema.name}" already exists. Please choose a unique name.`, 'error');
-                    return;
-                }
+                // Refuse to save a schema the server would skip. An existing file with the
+                // same name is handled below, by asking before overwriting it.
+                const problem = schemaValidator.findProblem(schema);
+                if (problem) throw new Error(problem);
 
                 const fileName = `${schema.name.replace('add_', '')}.schema.json`;
                 let fileHandle;
@@ -634,12 +635,6 @@
                 showToast('Schema name is required', 'error');
                 return;
             }
-            // Real-time validation for schema name uniqueness
-            const isSchemaNameUnique = schemaValidator.isSchemaNameUnique(name, dirHandle);
-            if (!isSchemaNameUnique) {
-                showToast('Schema name must be unique', 'error');
-                return;
-            }
             const properties = {};
             document.querySelectorAll('.property').forEach(prop => {
                 if (prop.id === 'property-name-property') return;
@@ -665,7 +660,7 @@
                 }
                 if (isRelationship) {
                     property.relationship = {
-                        edgeType: edgeType,
+                        edgeType: edgeType.trim(),
                         description: propDesc
                     };
                 }
@@ -689,27 +684,82 @@
                 properties: properties,
                 additionalProperties: allowAdditionalProps
             };
+            const problem = schemaValidator.findProblem(schema);
+            if (problem) {
+                showToast(problem, 'error', 6000);
+                return;
+            }
             editor.setValue(JSON.stringify(schema, null, 2));
             ui.switchTab('viewRaw');
         }
     };
 
     const schemaValidator = {
+        /** False when the selected folder already holds a schema file for this name (without "add_"). */
         isSchemaNameUnique: async (schemaName) => {
             if (!dirHandle) return true;
-            const fullSchemaName = `add_${schemaName}.schema.json`;
-            const simplifiedSchemaName = `${schemaName}.schema.json`
+            const fileName = `${schemaName}.schema.json`;
             try {
                 for await (const entry of dirHandle.values()) {
-                    if (entry.kind === 'file' && (entry.name === fullSchemaName || entry.name === simplifiedSchemaName)) {
-                        return false;
-                    }
+                    if (entry.kind === 'file' && entry.name === fileName) return false;
                 }
-                return true; // No matching file found
+                return true;
             } catch (error) {
                 console.error('Error checking for schema name uniqueness:', error);
-                return false; // Assume not unique in case of error
+                return true;
             }
+        },
+
+        /** Shows a hint under a property's name field while it is being typed. */
+        validatePropertyName: (input) => {
+            const name = input.value.trim();
+            const otherNames = [...document.querySelectorAll('.property-name')]
+                .filter(other => other !== input)
+                .map(other => other.value.trim());
+            let message = '';
+            if (name === 'metadata') {
+                message = '"metadata" is used by the update tool to replace all metadata. Choose another name.';
+            } else if (name !== '' && otherNames.includes(name)) {
+                message = 'Another property already has this name.';
+            }
+            const hint = input.parentElement.querySelector('.validation-message');
+            if (hint) hint.textContent = message;
+        },
+
+        /**
+         * Returns what is wrong with a schema, or null if it is fine.
+         * These are the checks MemoryMesh makes when it loads a schema (parseSchema in
+         * src/schemas.ts): a schema that fails one of them is skipped by the server.
+         */
+        findProblem: (schema) => {
+            const isText = value => typeof value === 'string' && value.trim() !== '';
+            const isObject = value => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+            if (!isObject(schema)) return 'The schema must be a JSON object';
+            if (typeof schema.name !== 'string' || !/^add_[A-Za-z0-9_-]+$/.test(schema.name)) {
+                return 'The schema name must be "add_" followed by letters, digits, "_" or "-" (no spaces)';
+            }
+            const entity = schema.name.slice('add_'.length);
+            if (['nodes', 'edges', 'metadata'].includes(entity)) {
+                return `"${entity}" is already the name of a built-in tool. Choose another schema name`;
+            }
+            if (entity.length > 57) return 'The schema name is too long (57 characters at most)';
+            if (!isText(schema.description)) return 'The schema needs a description';
+            if (!isObject(schema.properties)) return 'The schema must have properties defined';
+
+            for (const [name, prop] of Object.entries(schema.properties)) {
+                if (!isObject(prop) || !isText(prop.type)) return `Property "${name}" needs a type`;
+                if (!isText(prop.description)) return `Property "${name}" needs a description`;
+                if (prop.enum !== undefined &&
+                    (!Array.isArray(prop.enum) || prop.enum.length === 0 || !prop.enum.every(isText))) {
+                    return `Property "${name}" is marked as an enum, so it needs at least one allowed value`;
+                }
+                if (prop.relationship !== undefined && prop.relationship !== null && prop.relationship !== false &&
+                    (!isObject(prop.relationship) || !isText(prop.relationship.edgeType))) {
+                    return `Property "${name}" is marked as a relationship, so it needs an edge type`;
+                }
+            }
+            return null;
         }
     };
 
@@ -979,7 +1029,8 @@
             const isUnique = await schemaValidator.isSchemaNameUnique(schemaName);
 
             if (!isUnique) {
-                showToast('Schema name must be unique', 'error');
+                // Only a heads-up: saving asks before replacing the existing file.
+                showToast('A schema with this name already exists. Saving will ask before replacing it.', 'error');
             }
         });
 
